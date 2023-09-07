@@ -1,0 +1,7 @@
+# clangd lsp
+.clang-format
+.cache
+
+# build artifacts
+compile_commands.json
+Hivemind
