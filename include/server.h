@@ -23,22 +23,6 @@ typedef SOCKET socket_t;
 typedef int socket_t;
 #endif
 
-class ThreadPool {
-   public:
-    ThreadPool(size_t numThreads);
-    ~ThreadPool();
-
-    template <class F>
-    void enqueue(F&& f);
-
-   private:
-    std::vector<std::thread> workers_;
-    std::queue<std::function<void()>> tasks_;
-    std::mutex queueMutex_;
-    std::condition_variable condition_;
-    bool stop_ = false;
-};
-
 class Server {
    public:
     Server(int port);
@@ -55,7 +39,6 @@ class Server {
 
     int port_;
     socket_t server_fd_;
-    ThreadPool pool_;
 
     std::unordered_map<int, std::chrono::system_clock::time_point>
         active_clients;

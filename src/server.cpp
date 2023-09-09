@@ -35,53 +35,7 @@ void printDebug(const std::string &message) {
     std::cout << "DEBUG: " << message << std::endl;
 }
 
-ThreadPool::ThreadPool(size_t numThreads) {
-    for (size_t i = 0; i < numThreads; ++i) {
-        workers_.emplace_back([this] {
-            while (true) {
-                std::function<void()> task;
-
-                {
-                    std::unique_lock<std::mutex> lock(queueMutex_);
-                    condition_.wait(
-                        lock, [this] { return stop_ || !tasks_.empty(); });
-
-                    if (stop_ && tasks_.empty()) {
-                        return;
-                    }
-
-                    task = std::move(tasks_.front());
-                    tasks_.pop();
-                }
-
-                task();
-            }
-        });
-    }
-}
-
-ThreadPool::~ThreadPool() {
-    {
-        std::unique_lock<std::mutex> lock(queueMutex_);
-        stop_ = true;
-    }
-
-    condition_.notify_all();
-    for (std::thread &worker : workers_) {
-        worker.join();
-    }
-}
-
-template <class F>
-void ThreadPool::enqueue(F &&f) {
-    {
-        std::unique_lock<std::mutex> lock(queueMutex_);
-        tasks_.emplace(std::forward<F>(f));
-    }
-    condition_.notify_one();
-}
-
-Server::Server(int port) : port_(port), server_fd_(INVALID_SOCKET), pool_(4) {}
+Server::Server(int port) : port_(port), server_fd_(INVALID_SOCKET) {}
 
 Server::~Server() {
     if (server_fd_ != INVALID_SOCKET) {
@@ -246,7 +200,6 @@ void Server::handleClient(int epoll_fd, SOCKET socket) {
 }
 
 void Server::handleNewClient(int epoll_fd, struct sockaddr_in &address) {
-    printDebug("check 0");
     int addrlen = sizeof(address);
     SOCKET new_socket =
         accept(server_fd_, (struct sockaddr *)&address, (socklen_t *)&addrlen);
@@ -278,7 +231,6 @@ void Server::handleNewClient(int epoll_fd, struct sockaddr_in &address) {
         closeSocket(new_socket);
         return;
     }
-    printDebug("check 4");
 
     auto now = std::chrono::system_clock::now();
     active_clients[(int)new_socket] = now;
