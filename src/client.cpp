@@ -6,13 +6,19 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <cstring>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
+#include <thread>
 
-TcpClient::TcpClient(const std::string& serverAddress, int serverPort)
+#include "constants.h"
+
+Client::Client(const std::string& serverAddress, int serverPort)
     : serverAddress_(serverAddress), serverPort_(serverPort), sockfd_(-1) {}
 
-bool TcpClient::connectToServer() {
+bool Client::connectToServer() {
     sockfd_ = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd_ < 0) {
         perror("Socket creation failed");
@@ -38,10 +44,12 @@ bool TcpClient::connectToServer() {
         return false;
     }
 
+    std::thread(&Client::startHeartbeat, this).detach();
+
     return true;
 }
 
-bool TcpClient::sendMessage(const std::string& message) {
+bool Client::sendMessage(const std::string& message) {
     if (send(sockfd_, message.c_str(), message.length(), 0) < 0) {
         perror("Send failed");
         return false;
@@ -49,9 +57,10 @@ bool TcpClient::sendMessage(const std::string& message) {
     return true;
 }
 
-bool TcpClient::receiveMessage() {
+bool Client::receiveMessage() {
     char buffer[1024] = {0};
     int valread = recv(sockfd_, buffer, 1024, 0);
+    std::cout << "valread: " << valread << std::endl;
     if (valread < 0) {
         perror("Recv failed");
         return false;
@@ -61,11 +70,32 @@ bool TcpClient::receiveMessage() {
     return true;
 }
 
-TcpClient::~TcpClient() {
+Client::~Client() {
+    std::cout << "Shutting down client." << std::endl;
     closeSocket(sockfd_);
 }
 
-void TcpClient::closeSocket(int& socket) {
+std::string getCurrentTimestamp() {
+    auto now = std::chrono::system_clock::now();
+    auto nowAsTimePoint = std::chrono::system_clock::to_time_t(now);
+
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&nowAsTimePoint), "%Y-%m-%d %H:%M:%S");
+
+    return ss.str();
+}
+
+void Client::startHeartbeat() {
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+        if (!sendMessage(HEARTBEAT_PREFIX + " " + getCurrentTimestamp())) {
+            std::cerr << "Failed to send heartbeat message.\n";
+            break;
+        }
+    }
+}
+
+void Client::closeSocket(int& socket) {
     if (socket >= 0) {
         close(socket);
         socket = -1;

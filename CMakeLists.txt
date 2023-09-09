@@ -11,6 +11,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Include directories
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
+# compile server or client?
+add_definitions(-DCLIENT=${CLIENT_VALUE})
+message(STATUS "Compiling with CLIENT=${CLIENT_VALUE}")
+
 # Add executable
 file(GLOB SOURCES "src/*.cpp")
 list(APPEND SOURCES "${PROJECT_SOURCE_DIR}/main.cpp")

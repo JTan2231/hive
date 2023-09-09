@@ -1,13 +1,15 @@
 #include <string>
 
-class TcpClient {
+class Client {
    public:
-    TcpClient(const std::string& serverAddress, int serverPort);
-    ~TcpClient();
+    Client(const std::string& serverAddress, int serverPort);
+    ~Client();
 
     bool connectToServer();
     bool sendMessage(const std::string& message);
     bool receiveMessage();
+
+    void startHeartbeat();
 
    private:
     std::string serverAddress_;
