@@ -1,4 +1,8 @@
+#ifndef CLIENT_H
+#define CLIENT_H
 #include <string>
+
+#include "messaging.h"
 
 class Client {
    public:
@@ -6,7 +10,8 @@ class Client {
     ~Client();
 
     bool connectToServer();
-    bool sendMessage(const std::string& message);
+    bool sendMessage(const std::string& message,
+                     const messaging::MessageType& type);
     bool receiveMessage();
 
     void startHeartbeat();
@@ -18,3 +23,5 @@ class Client {
 
     void closeSocket(int& socket);
 };
+
+#endif

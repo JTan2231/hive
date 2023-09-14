@@ -23,6 +23,8 @@ typedef SOCKET socket_t;
 typedef int socket_t;
 #endif
 
+#include "messaging.h"
+
 class Server {
    public:
     Server(int port);
@@ -36,6 +38,9 @@ class Server {
     void handleClient(int epoll_fd, socket_t socket);
     void handleNewClient(int epoll_fd, struct sockaddr_in& address);
     void monitorClients();
+
+    bool sendMessage(const std::string& body,
+                     const messaging::MessageType& type);
 
     int port_;
     socket_t server_fd_;

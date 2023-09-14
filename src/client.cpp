@@ -14,6 +14,7 @@
 #include <thread>
 
 #include "constants.h"
+#include "messaging.h"
 
 Client::Client(const std::string& serverAddress, int serverPort)
     : serverAddress_(serverAddress), serverPort_(serverPort), sockfd_(-1) {}
@@ -49,12 +50,9 @@ bool Client::connectToServer() {
     return true;
 }
 
-bool Client::sendMessage(const std::string& message) {
-    if (send(sockfd_, message.c_str(), message.length(), 0) < 0) {
-        perror("Send failed");
-        return false;
-    }
-    return true;
+bool Client::sendMessage(const std::string& body,
+                         const messaging::MessageType& type) {
+    return messaging::sendMessage(sockfd_, body, type);
 }
 
 bool Client::receiveMessage() {
@@ -88,7 +86,8 @@ std::string getCurrentTimestamp() {
 void Client::startHeartbeat() {
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(3));
-        if (!sendMessage(HEARTBEAT_PREFIX + " " + getCurrentTimestamp())) {
+        if (!sendMessage(HEARTBEAT_PREFIX + " " + getCurrentTimestamp(),
+                         messaging::MessageType::HEARTBEAT)) {
             std::cerr << "Failed to send heartbeat message.\n";
             break;
         }

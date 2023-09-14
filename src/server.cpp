@@ -30,9 +30,24 @@ using SOCKET = int;
 #endif
 
 #include "constants.h"
+#include "messaging.h"
 
 void printDebug(const std::string &message) {
     std::cout << "DEBUG: " << message << std::endl;
+}
+
+void parseInitMessage(const std::string &initMessage, std::string &username,
+                      std::string &ip) {
+    std::size_t usernamePos = initMessage.find("USERNAME:");
+    std::size_t ipPos = initMessage.find(";IP:");
+    std::size_t endPos = initMessage.find(";", ipPos + 1);
+
+    if (usernamePos != std::string::npos && ipPos != std::string::npos) {
+        username = initMessage.substr(usernamePos + 9, ipPos - usernamePos - 9);
+        ip = initMessage.substr(ipPos + 4, endPos - ipPos - 4);
+    } else {
+        std::cerr << "Invalid init message format" << std::endl;
+    }
 }
 
 Server::Server(int port) : port_(port), server_fd_(INVALID_SOCKET) {}
@@ -195,8 +210,8 @@ void Server::handleClient(int epoll_fd, SOCKET socket) {
               << " -- " << active_clients.size() << " total connections."
               << std::endl;
 
-    const char *response = "Hello from server";
-    send(socket, response, strlen(response), 0);
+    std::string body = "Hello from server";
+    sendMessage(body, messaging::MessageType::DATA);
 }
 
 void Server::handleNewClient(int epoll_fd, struct sockaddr_in &address) {
