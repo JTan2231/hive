@@ -1,6 +1,7 @@
 #ifndef CLIENT_H
 #define CLIENT_H
 #include <string>
+#include <vector>
 
 #include "messaging.h"
 
@@ -10,8 +11,14 @@ class Client {
     ~Client();
 
     bool connectToServer();
+
     bool sendMessage(const std::string& message,
                      const messaging::MessageType& type);
+    bool sendMessage(const messaging::Message& message);
+
+    bool sendMessageInPackets(const messaging::Message& header,
+                              const std::vector<messaging::Message>& packets);
+
     bool receiveMessage();
 
     void startHeartbeat();

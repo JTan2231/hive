@@ -55,6 +55,10 @@ bool Client::sendMessage(const std::string& body,
     return messaging::sendMessage(sockfd_, body, type);
 }
 
+bool Client::sendMessage(const messaging::Message& message) {
+    return messaging::sendMessage(sockfd_, message);
+}
+
 bool Client::receiveMessage() {
     char buffer[1024] = {0};
     int valread = recv(sockfd_, buffer, 1024, 0);
@@ -65,6 +69,38 @@ bool Client::receiveMessage() {
     }
 
     std::cout << "Received: " << buffer << '\n';
+    return true;
+}
+
+bool Client::sendMessageInPackets(
+    const messaging::Message& header,
+    const std::vector<messaging::Message>& packets) {
+    // send header
+    if (!sendMessage(header)) {
+        std::cerr << "Failed to send header" << std::endl;
+        return false;
+    }
+
+    // acknowledgement
+    if (!receiveMessage()) {
+        std::cerr << "Failed to receive acknowledgement" << std::endl;
+        return false;
+    }
+
+    // Here you should also check the contents of the received message to ensure
+    // it is the expected acknowledgement
+    // ...
+
+    // send packets
+    for (const messaging::Message& packet : packets) {
+        if (!sendMessage(packet)) {
+            std::cerr << "Failed to send data packet" << std::endl;
+            return false;
+        }
+    }
+
+    // TODO: acknowledgement for all packets
+
     return true;
 }
 
@@ -86,8 +122,9 @@ std::string getCurrentTimestamp() {
 void Client::startHeartbeat() {
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(3));
-        if (!sendMessage(HEARTBEAT_PREFIX + " " + getCurrentTimestamp(),
-                         messaging::MessageType::HEARTBEAT)) {
+        if (!sendMessage(
+                constants::HEARTBEAT_PREFIX + " " + getCurrentTimestamp(),
+                messaging::MessageType::HEARTBEAT)) {
             std::cerr << "Failed to send heartbeat message.\n";
             break;
         }

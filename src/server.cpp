@@ -142,7 +142,7 @@ bool Server::listen() {
                 handleNewClient(epoll_fd, address);
             } else {
                 // Data available to read on a client socket
-                handleClient(epoll_fd, events[i].data.fd);
+                handleClient(SocketInfo(epoll_fd, events[i].data.fd));
             }
         }
     }
@@ -170,13 +170,13 @@ void Server::closeSocket(SOCKET socket) {
 #endif
 }
 
-// check if string is a heartbeat message
-bool checkHeartbeat(const std::string &message) {
-    return message.substr(0, HEARTBEAT_PREFIX.size()) == HEARTBEAT_PREFIX;
-}
+// receive some data using `recv`,
+// read into `message`
+void Server::receiveData(const SocketInfo &info, messaging::Message &message) {
+    int epoll_fd = info.epoll_fd;
+    int socket = info.socket_fd;
 
-void Server::handleClient(int epoll_fd, SOCKET socket) {
-    char buffer[1024] = {0};
+    uint8_t buffer[1024] = {0};
     ssize_t valread = recv(socket, buffer, 1024, 0);
     if (valread <= 0) {
         if (valread < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
@@ -201,19 +201,40 @@ void Server::handleClient(int epoll_fd, SOCKET socket) {
 
     buffer[valread] = '\0';
 
-    std::string received_message(buffer);
-    if (checkHeartbeat(received_message)) {
-        active_clients[(int)socket] = std::chrono::system_clock::now();
-    }
-
-    std::cout << "Received \"" << buffer << "\" from connection " << (int)socket
-              << " -- " << active_clients.size() << " total connections."
-              << std::endl;
-
-    std::string body = "Hello from server";
-    sendMessage(body, messaging::MessageType::DATA);
+    messaging::deserializeMessage(static_cast<const uint8_t *const>(buffer),
+                                  constants::MESSAGE_BUFFER_SIZE, message);
 }
 
+void Server::logMessage(const SocketInfo &info,
+                        const messaging::Message &message) {
+    std::cout << "Received \"" << message.body << "\" from connection "
+              << (int)info.socket_fd << " -- " << active_clients.size()
+              << " total connections." << std::endl;
+}
+
+void Server::handleHeartbeat(const SocketInfo &info,
+                             const messaging::Message &message) {
+    active_clients[info.socket_fd] = std::chrono::system_clock::now();
+    logMessage(info, message);
+}
+
+void Server::handleClient(const SocketInfo info) {
+    messaging::Message message;
+
+    receiveData(info, message);
+
+    if (message.type == messaging::MessageType::HEARTBEAT) {
+        handleHeartbeat(info, message);
+    } else if (message.type == messaging::MessageType::HEADER ||
+               message.type == messaging::MessageType::DATA) {
+        handleDataTransmissionSession(info);
+    } else {
+        std::cerr << "Unknown message type sent -- disregarding message"
+                  << std::endl;
+    }
+}
+
+// establishes socket connection and spot in epoll instance
 void Server::handleNewClient(int epoll_fd, struct sockaddr_in &address) {
     int addrlen = sizeof(address);
     SOCKET new_socket =
@@ -251,6 +272,11 @@ void Server::handleNewClient(int epoll_fd, struct sockaddr_in &address) {
     active_clients[(int)new_socket] = now;
 
     std::cout << "New client connected on socket " << new_socket << std::endl;
+}
+
+bool Server::sendMessage(const std::string &body,
+                         const messaging::MessageType &type) {
+    return messaging::sendMessage(server_fd_, body, type);
 }
 
 void Server::monitorClients() {
