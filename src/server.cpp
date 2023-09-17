@@ -36,8 +36,7 @@ void printDebug(const std::string &message) {
     std::cout << "DEBUG: " << message << std::endl;
 }
 
-void parseInitMessage(const std::string &initMessage, std::string &username,
-                      std::string &ip) {
+void parseInitMessage(const std::string &initMessage, std::string &username, std::string &ip) {
     std::size_t usernamePos = initMessage.find("USERNAME:");
     std::size_t ipPos = initMessage.find(";IP:");
     std::size_t endPos = initMessage.find(";", ipPos + 1);
@@ -201,21 +200,29 @@ void Server::receiveData(const SocketInfo &info, messaging::Message &message) {
 
     buffer[valread] = '\0';
 
-    messaging::deserializeMessage(static_cast<const uint8_t *const>(buffer),
-                                  constants::MESSAGE_BUFFER_SIZE, message);
+    messaging::deserializeMessage(static_cast<const uint8_t *const>(buffer), constants::MESSAGE_BUFFER_SIZE, message);
 }
 
-void Server::logMessage(const SocketInfo &info,
-                        const messaging::Message &message) {
-    std::cout << "Received \"" << message.body << "\" from connection "
-              << (int)info.socket_fd << " -- " << active_clients.size()
-              << " total connections." << std::endl;
+void Server::logMessage(const SocketInfo &info, const messaging::Message &message) {
+    std::string body;
+    for (char c : message.body) {
+        body.push_back(c);
+    }
+
+    std::cout << "Received \"" << body << "\" from connection " << (int)info.socket_fd << " -- "
+              << active_clients.size() << " total connections." << std::endl;
 }
 
-void Server::handleHeartbeat(const SocketInfo &info,
-                             const messaging::Message &message) {
+void Server::handleHeartbeat(const SocketInfo &info, const messaging::Message &message) {
     active_clients[info.socket_fd] = std::chrono::system_clock::now();
     logMessage(info, message);
+}
+
+void Server::handleDataTransmissionSession(const SocketInfo &info) {
+    ClientSession &session = client_sessions_[info.socket_fd];
+
+    if (session.state == TransmissionState::AWAITING_HEADER) {
+    }
 }
 
 void Server::handleClient(const SocketInfo info) {
@@ -225,20 +232,17 @@ void Server::handleClient(const SocketInfo info) {
 
     if (message.type == messaging::MessageType::HEARTBEAT) {
         handleHeartbeat(info, message);
-    } else if (message.type == messaging::MessageType::HEADER ||
-               message.type == messaging::MessageType::DATA) {
+    } else if (message.type == messaging::MessageType::HEADER || message.type == messaging::MessageType::DATA) {
         handleDataTransmissionSession(info);
     } else {
-        std::cerr << "Unknown message type sent -- disregarding message"
-                  << std::endl;
+        std::cerr << "Unknown message type sent -- disregarding message" << std::endl;
     }
 }
 
 // establishes socket connection and spot in epoll instance
 void Server::handleNewClient(int epoll_fd, struct sockaddr_in &address) {
     int addrlen = sizeof(address);
-    SOCKET new_socket =
-        accept(server_fd_, (struct sockaddr *)&address, (socklen_t *)&addrlen);
+    SOCKET new_socket = accept(server_fd_, (struct sockaddr *)&address, (socklen_t *)&addrlen);
     if (new_socket < 0) {
         perror("accept");
         return;
@@ -274,20 +278,17 @@ void Server::handleNewClient(int epoll_fd, struct sockaddr_in &address) {
     std::cout << "New client connected on socket " << new_socket << std::endl;
 }
 
-bool Server::sendMessage(const std::string &body,
-                         const messaging::MessageType &type) {
+bool Server::sendMessage(const std::string &body, const messaging::MessageType &type) {
     return messaging::sendMessage(server_fd_, body, type);
 }
 
 void Server::monitorClients() {
     while (true) {
-        std::this_thread::sleep_for(
-            std::chrono::seconds(30));  // Adjust the interval as necessary
+        std::this_thread::sleep_for(std::chrono::seconds(30));  // Adjust the interval as necessary
 
         auto now = std::chrono::system_clock::now();
         for (auto it = active_clients.begin(); it != active_clients.end();) {
-            if (now - it->second >
-                std::chrono::seconds(60)) {  // Adjust the timeout as necessary
+            if (now - it->second > std::chrono::seconds(60)) {  // Adjust the timeout as necessary
                 it = active_clients.erase(it);
             } else {
                 ++it;
