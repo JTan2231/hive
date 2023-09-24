@@ -12,6 +12,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_definitions(-DCLIENT=${CLIENT_VALUE})
 message(STATUS "Compiling with CLIENT=${CLIENT_VALUE}")
 
+# compile for windows or linux?
+add_definitions(-D_WIN64=${USING_WINDOWS})
+message(STATUS "Compiling with _WIN64=${USING_WINDOWS}")
+
 # Include directories
 include_directories(${PROJECT_SOURCE_DIR}/include)
 

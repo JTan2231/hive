@@ -1,4 +1,8 @@
-#include "server.h"
+#include "node.h"
+
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #include <condition_variable>
 #include <cstring>
@@ -10,31 +14,24 @@
 #include <thread>
 #include <vector>
 
-#if defined(_WIN32) || defined(_WIN64)
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#pragma comment(lib, "ws2_32.lib")
-
-using ssize_t = int;
-#else
-#include <arpa/inet.h>
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <sys/epoll.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#define USE_EPOLL !_WIN64
 
 using SOCKET = int;
 #define INVALID_SOCKET (-1)
 #define SOCKET_ERROR (-1)
+
+#if !USE_EPOLL
+#include <sys/select.h>
+#include <sys/time.h>
+#else
+#include <fcntl.h>
+#include <sys/epoll.h>
 #endif
 
 #include "constants.h"
 #include "messaging.h"
 
-void printDebug(const std::string &message) {
-    std::cout << "DEBUG: " << message << std::endl;
-}
+void printDebug(const std::string &message) { std::cout << "DEBUG: " << message << std::endl; }
 
 void parseInitMessage(const std::string &initMessage, std::string &username, std::string &ip) {
     std::size_t usernamePos = initMessage.find("USERNAME:");
@@ -49,11 +46,11 @@ void parseInitMessage(const std::string &initMessage, std::string &username, std
     }
 }
 
-Server::Server(int port) : port_(port), server_fd_(INVALID_SOCKET) {}
+Server::Server(int port) : port_(port), host_fd_(INVALID_SOCKET) {}
 
 Server::~Server() {
-    if (server_fd_ != INVALID_SOCKET) {
-        closeSocket(server_fd_);
+    if (host_fd_ != INVALID_SOCKET) {
+        closeSocket(host_fd_);
     }
 }
 
@@ -62,27 +59,29 @@ bool Server::listen() {
         return false;
     }
 
-    server_fd_ = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd_ == INVALID_SOCKET) {
+    host_fd_ = socket(AF_INET, SOCK_STREAM, 0);
+    if (host_fd_ == INVALID_SOCKET) {
         perror("socket failed");
         return false;
     }
 
-    // Make the server socket non-blocking
-    int flags = fcntl(server_fd_, F_GETFL, 0);
+#if USE_EPOLL
+    // Make the server socket non-blocking for epoll
+    int flags = fcntl(host_fd_, F_GETFL, 0);
     if (flags == -1) {
         perror("fcntl get flags");
         return false;
     }
-    if (fcntl(server_fd_, F_SETFL, flags | O_NONBLOCK) == -1) {
+    if (fcntl(host_fd_, F_SETFL, flags | O_NONBLOCK) == -1) {
         perror("fcntl set non-blocking");
         return false;
     }
+#endif
 
     int opt = 1;
-    if (setsockopt(server_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+    if (setsockopt(host_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
         perror("setsockopt");
-        closeSocket(server_fd_);
+        closeSocket(host_fd_);
         return false;
     }
 
@@ -91,106 +90,127 @@ bool Server::listen() {
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(port_);
 
-    if (bind(server_fd_, (struct sockaddr *)&address, sizeof(address)) < 0) {
+    if (bind(host_fd_, (struct sockaddr *)&address, sizeof(address)) < 0) {
         perror("bind failed");
-        closeSocket(server_fd_);
+        closeSocket(host_fd_);
         return false;
     }
 
-    if (::listen(server_fd_, 3) < 0) {
+    if (::listen(host_fd_, 3) < 0) {
         perror("listen");
-        closeSocket(server_fd_);
-        return false;
-    }
-
-    // Setting up epoll
-    int epoll_fd = epoll_create1(0);
-    if (epoll_fd == -1) {
-        perror("epoll_create1");
-        closeSocket(server_fd_);
-        return false;
-    }
-
-    struct epoll_event event;
-    event.events = EPOLLIN;
-    event.data.fd = server_fd_;
-
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fd_, &event) == -1) {
-        perror("epoll_ctl");
-        closeSocket(server_fd_);
-        close(epoll_fd);
+        closeSocket(host_fd_);
         return false;
     }
 
     std::cout << "Server listening on port " << port_ << std::endl;
 
-    // Event loop
+#if USE_EPOLL
+    // Setting up epoll
+    epoll_fd_ = epoll_create1(0);
+    if (epoll_fd_ == -1) {
+        perror("epoll_create1");
+        closeSocket(host_fd_);
+        return false;
+    }
+
+    struct epoll_event event;
+    event.events = EPOLLIN;
+    event.data.fd = host_fd_;
+
+    if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, host_fd_, &event) == -1) {
+        perror("epoll_ctl");
+        closeSocket(host_fd_);
+        close(epoll_fd_);
+        return false;
+    }
+
+    // Event loop for epoll
     while (true) {
         struct epoll_event events[10];
-        int num_fds = epoll_wait(epoll_fd, events, 10, -1);
+        int num_fds = epoll_wait(epoll_fd_, events, 10, -1);
         if (num_fds == -1) {
             perror("epoll_wait");
-            closeSocket(server_fd_);
-            close(epoll_fd);
+            closeSocket(host_fd_);
+            close(epoll_fd_);
             return false;
         }
 
         for (int i = 0; i < num_fds; i++) {
-            if (events[i].data.fd == server_fd_) {
+            if (events[i].data.fd == host_fd_) {
                 // New client connecting
-                handleNewClient(epoll_fd, address);
+                handleNewClient(epoll_fd_, address);
             } else {
                 // Data available to read on a client socket
-                handleClient(SocketInfo(epoll_fd, events[i].data.fd));
+                handleClient(SocketInfo(epoll_fd_, events[i].data.fd));
             }
         }
     }
+#else
+    // Using select
+    FD_ZERO(&master_set_);
+    FD_SET(host_fd_, &master_set_);
 
-    return true;
-}
+    highest_fd_ = host_fd_;
 
-bool Server::initialize() {
-#if defined(_WIN32) || defined(_WIN64)
-    WSADATA wsaData;
-    int res = WSAStartup(MAKEWORD(2, 2), &wsaData);
-    if (res != 0) {
-        std::cerr << "WSAStartup failed: " << res << '\n';
-        return false;
+    while (true) {
+        read_set_ = master_set_;
+        if (select(highest_fd_ + 1, &read_set_, NULL, NULL, NULL) == -1) {
+            perror("select");
+            closeSocket(host_fd_);
+            return false;
+        }
+
+        for (int i = 0; i <= highest_fd_; i++) {
+            if (FD_ISSET(i, &read_set_)) {
+                if (i == host_fd_) {
+                    // TODO
+                    // handleNewClientWithSelect(&master_set_, &highest_fd_, address);
+                } else {
+                    // TODO
+                    // handleClient(SocketInfo(i));
+                    FD_CLR(i, &master_set_);
+                }
+            }
+        }
     }
 #endif
+
     return true;
 }
 
-void Server::closeSocket(SOCKET socket) {
-#if defined(_WIN32) || defined(_WIN64)
-    closesocket(socket);
-#else
-    close(socket);
-#endif
-}
+bool Server::initialize() { return true; }
+
+void Server::closeSocket(SOCKET socket) { close(socket); }
 
 // receive some data using `recv`,
 // read into `message`
 void Server::receiveData(const SocketInfo &info, messaging::Message &message) {
-    int epoll_fd = info.epoll_fd;
     int socket = info.socket_fd;
 
     uint8_t buffer[1024] = {0};
     ssize_t valread = recv(socket, buffer, 1024, 0);
     if (valread <= 0) {
+#if USE_EPOLL
+        int epoll_fd_ = info.epoll_fd_;
+
         if (valread < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             // Temporarily out of resources or nothing to read, try again
             // later
             return;
         }
 
+        // Connection closed
+        if (epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, socket, NULL) == -1) {
+            perror("epoll_ctl: del");
+        }
+#else
+// For select: If valread <= 0, the connection has been closed.
+// Nothing specific to do for select, as the socket will be removed
+// from the fd_set in the main loop after this function exits.
+#endif
+
         if (valread < 0) {
             perror("recv");
-        }
-
-        // Connection closed
-        if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, socket, NULL) == -1) {
-            perror("epoll_ctl: del");
         }
 
         closeSocket(socket);
@@ -235,20 +255,20 @@ void Server::handleClient(const SocketInfo info) {
     } else if (message.type == messaging::MessageType::HEADER || message.type == messaging::MessageType::DATA) {
         handleDataTransmissionSession(info);
     } else {
-        std::cerr << "Unknown message type sent -- disregarding message" << std::endl;
+        std::cerr << "Unknown message type sent -- discarding." << std::endl;
     }
 }
 
-// establishes socket connection and spot in epoll instance
-void Server::handleNewClient(int epoll_fd, struct sockaddr_in &address) {
+void Server::handleNewClient(struct sockaddr_in &address) {
     int addrlen = sizeof(address);
-    SOCKET new_socket = accept(server_fd_, (struct sockaddr *)&address, (socklen_t *)&addrlen);
+    SOCKET new_socket = accept(host_fd_, (struct sockaddr *)&address, (socklen_t *)&addrlen);
     if (new_socket < 0) {
         perror("accept");
         return;
     }
 
-    // Make the new socket non-blocking
+#if USE_EPOLL
+    // Make the new socket non-blocking for epoll
     int flags = fcntl(new_socket, F_GETFL, 0);
     if (flags == -1) {
         perror("fcntl");
@@ -266,11 +286,19 @@ void Server::handleNewClient(int epoll_fd, struct sockaddr_in &address) {
     struct epoll_event event;
     event.events = EPOLLIN;
     event.data.fd = new_socket;
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, new_socket, &event) == -1) {
+    if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, new_socket, &event) == -1) {
         perror("epoll_ctl");
         closeSocket(new_socket);
         return;
     }
+#else
+    // For select: Add the socket to the master fd_set
+    FD_SET(new_socket, &master_set_);
+    // Update the highest file descriptor if necessary
+    if (new_socket > highest_fd_) {
+        highest_fd_ = new_socket;
+    }
+#endif
 
     auto now = std::chrono::system_clock::now();
     active_clients[(int)new_socket] = now;
@@ -279,7 +307,7 @@ void Server::handleNewClient(int epoll_fd, struct sockaddr_in &address) {
 }
 
 bool Server::sendMessage(const std::string &body, const messaging::MessageType &type) {
-    return messaging::sendMessage(server_fd_, body, type);
+    return messaging::sendMessage(host_fd_, body, type);
 }
 
 void Server::monitorClients() {

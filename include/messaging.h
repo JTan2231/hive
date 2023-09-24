@@ -1,20 +1,33 @@
 #ifndef MESSAGING_H
 #define MESSAGING_H
 
-#include <map>
-#include <string>
-#include <vector>
-
-#if defined(_WIN32) || defined(_WIN64)
-#include <winsock2.h>
-typedef int socklen_t;
-typedef SOCKET socket_t;
-#else
-#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
-#include <sys/types.h>
-typedef int socket_t;
+#include <unistd.h>
+
+#include <condition_variable>
+#include <cstring>
+#include <functional>
+#include <iostream>
+#include <map>
+#include <mutex>
+#include <queue>
+#include <string>
+#include <thread>
+#include <vector>
+
+#define USE_EPOLL !_WIN64
+
+using SOCKET = int;
+#define INVALID_SOCKET (-1)
+#define SOCKET_ERROR (-1)
+
+#if !USE_EPOLL
+#include <sys/select.h>
+#include <sys/time.h>
+#else
+#include <fcntl.h>
+#include <sys/epoll.h>
 #endif
 
 #include "constants.h"

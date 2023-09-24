@@ -24,14 +24,12 @@ function build_project {
 }
 
 if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 [client|server|both|test] [test_name]"
+    echo "Usage: $0 [node|test] [test_name]"
     exit 1
 fi
 
-if [ "$1" = "client" ]; then
+if [ "$1" = "node" ]; then
     build_project 1 client
-elif [ "$1" = "server" ]; then
-    build_project 0 server
 elif [ "$1" = "both" ]; then
     build_project 1 client
     build_project 0 server
