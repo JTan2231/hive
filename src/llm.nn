@@ -1,0 +1,4 @@
+let A = tensor(256, 512);
+let B = tensor(512, 1024);
+let C = matmul(A, B);
+C = matmul(C, C)

@@ -1,6 +1,10 @@
 #include <cstdlib>
 #include <iostream>
 #include <set>
+#include <string>
+#include <vector>
+
+namespace nn_parser {
 
 // takes as input a .nn file
 // and spits out a computational graph for computing it
@@ -44,13 +48,18 @@ class NNParser {
                     // cursor should be left at the start of the variable
                     // definition
                     // TODO
-                    registerVariableDefinition(variable_name);
+                    registerVariableDefinition(variable_name, contents);
                 }
             }
         }
     }
 
    private:
+    bool isAlphanumeric(char c) {
+        return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' ||
+               c >= '0' && c <= '9' || c == '_';
+    }
+
     void incrementCursor() {
         cursor_++;
         inBounds();  // safety check
@@ -96,6 +105,7 @@ class NNParser {
             }
 
             variable_name += at(contents);
+            incrementCursor();
         }
 
         if (registered_variables.find(variable_name) !=
@@ -112,7 +122,52 @@ class NNParser {
         return variable_name;
     }
 
-    void registerVariableDefinition(const std::string& variable_name) {}
+    void registerVariableDefinition(const std::string& variable_name,
+                                    const std::string& contents) {
+        // the definition MUST start with an op
+        // so we start with looking for the end of the op name,
+        // which is either a `;` or `(`
+
+        std::string op_name = "";
+        while (inBounds() && isAlphanumeric(at(contents))) {
+            op_name += at(contents);
+            incrementCursor();
+        }
+
+        if (at(contents) == '(') {
+            // register list of operator arguments
+            incrementCursor();
+
+            // only expecting integer arguments for now
+            // might change in the future
+            std::vector<int> args;
+            std::string arg_buffer = "";
+            while (inBounds() && at(contents) != ')') {
+                if (at(contents) == ',') {
+                    args.push_back(std::stoi(arg_buffer));
+                    arg_buffer = "";
+                } else if (at(contents) >= '0' && at(contents) <= '9') {
+                    arg_buffer += at(contents);
+                } else if (at(contents) != ' ') {
+                    std::cerr << "NNParser::registerVariableDefinition error: "
+                                 "expected a number, `)`, or `,`"
+                              << std::endl;
+                }
+            }
+
+            if (arg_buffer.size() > 0) {
+                args.push_back(std::stoi(arg_buffer));
+            }
+        } else if (at(contents) == ';') {
+            // register operator without arguments
+            // should this even exist?
+        } else {
+            std::cerr << "NNParser::registerVariableDefinition error: expected "
+                         "operator arguments or `;`"
+                      << std::endl;
+            exit(-1);
+        }
+    }
 
     std::string buffer_;
 
@@ -128,3 +183,5 @@ class NNParser {
 
     std::set<std::string> registered_variables;
 };
+
+}  // namespace nn_parser

@@ -7,4 +7,6 @@ compile_commands.json
 Hivemind
 node
 test
+client
+server
 *.exe
