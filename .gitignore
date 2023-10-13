@@ -9,4 +9,5 @@ node
 test
 client
 server
+parser
 *.exe
