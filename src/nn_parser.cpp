@@ -140,9 +140,7 @@ class NNParser {
         return in;
     }
 
-    char at(const std::string& contents) {
-        return contents[cursor_];
-    }
+    char at(const std::string& contents) { return contents[cursor_]; }
 
     void incrementAndAdd(const std::string& contents) {
         incrementCursor();
@@ -189,7 +187,7 @@ class NNParser {
         return variable_name;
     }
 
-    void registerVariableDefinition(const std::string& contents) {
+    std::string registerVariableDefinition(const std::string& contents) {
         // the definition MUST start with an op
         // so we start with looking for the end of the op name,
         // which is either a `;` or `(`
@@ -230,7 +228,8 @@ class NNParser {
                     } else if (Operations::valid(arg_buffer)) {
                         // this arg is the result of an operation
                         // get the result and attach it here
-                        registerVariableDefinition(contents);
+                        arg_buffer = registerVariableDefinition(contents);
+                        args.push_back(arg_buffer);
                         arg_buffer = "";
                     } else if (registered_variables.find(arg_buffer) != registered_variables.end()) {
                         // ???
@@ -278,6 +277,8 @@ class NNParser {
         }
 
         buffer_ += at(contents);
+
+        return op_name;
     }
 
     std::string buffer_;
