@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "./ops.cpp"
+
 #define DEBUG 1
 
 namespace nn_parser {
@@ -29,6 +31,8 @@ class NNParser {
     ~NNParser() {}
 
     // TODO: this should return a (as of yet unmade) computational graph object
+    // TODO: handle variable reassignment
+    // TODO: variables as arguments? how are those being handled?
     void parse(const std::string& contents) {
         // order of operations when looking at a file
         // we are looking for
@@ -223,7 +227,7 @@ class NNParser {
                     if (isNumeric(arg_buffer)) {
                         args.push_back(arg_buffer);
                         arg_buffer = "";
-                    } else if (registered_operations.find(arg_buffer) != registered_operations.end()) {
+                    } else if (Operations::valid(arg_buffer)) {
                         // this arg is the result of an operation
                         // get the result and attach it here
                         registerVariableDefinition(contents);
@@ -283,10 +287,6 @@ class NNParser {
     size_t line_;
 
     const std::string variable_declarator = "let";
-
-    std::set<std::string> registered_operations = {
-        "add", "subtract", "divide", "multiply", "matmul", "concat", "matrix", "softmax",
-    };
 
     std::set<std::string> registered_variables;
 };

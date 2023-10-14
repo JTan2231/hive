@@ -1,4 +1,5 @@
 #include <iostream>
+#include <map>
 #include <memory>
 #include <set>
 #include <unordered_map>
@@ -6,7 +7,7 @@
 
 // change this lol
 #include "buffer.cpp"
-#include "ops/op.cpp"
+#include "ops.cpp"
 
 class Node;
 class Graph;
@@ -19,8 +20,19 @@ class Node {
         return id_;
     }
 
+    void setInput(std::string name, std::shared_ptr<Buffer> buffer) {
+        inputs_[name] = buffer;
+    }
+
+    void setOutput(std::string name, std::shared_ptr<Buffer> buffer) {
+        outputs_[name] = buffer;
+    }
+
    private:
     int id_;
+
+    std::map<std::string, std::shared_ptr<Buffer>> inputs_;
+    std::map<std::string, std::shared_ptr<Buffer>> outputs_;
 
     friend class Graph;
 };
@@ -49,6 +61,33 @@ class Graph {
         }
 
         edges_[from].insert(to);
+    }
+
+    // TODO: this probably needs moved out of this class
+    void newTensor(std::string name, DTYPE dtype, std::vector<int> shape) {
+        size_t total_size = 1;
+        for (int dim : shape) {
+            total_size *= dim;
+        }
+
+        std::shared_ptr<Buffer> buffer(new Buffer(total_size, dtype));
+        std::shared_ptr<Node> node = newNode();
+
+        node->setOutput(name, buffer);
+    }
+
+    void createOperation(std::string op_name, std::string variable_name, std::vector<std::string> args) {
+        // TODO: requiring tensor arguments to be constant integers
+        //       setting variables for dimension sizes?
+        //       this definitely needs to be changed
+        if (op_name == Operations::TENSOR) {
+            std::vector<int> tensor_args;
+            for (std::string& s : args) {
+                tensor_args.push_back(std::stoi(s));
+            }
+
+            newTensor(variable_name, DTYPE::float32, tensor_args);
+        }
     }
 
    private:
