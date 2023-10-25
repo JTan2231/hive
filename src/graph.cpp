@@ -66,7 +66,8 @@ class Graph {
     // e.g.
     //      let A = tensor(256, 512); // this is allowed
     //      let B;                    // this is not allowed
-    std::string createVariable(std::string name, std::string operation_type, std::vector<std::string> arguments) {
+    std::string createVariable(const std::string& name, const std::string& operation_type,
+                               const std::vector<std::string>& arguments) {
         std::shared_ptr<Node> new_node = newNode();
 
         new_node->name_ = name;

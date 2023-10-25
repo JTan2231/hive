@@ -38,7 +38,7 @@ class NNParser {
         // we are looking for
         //   - a variable decalaration
         //   - a definition for the above variable
-        while (inBounds()) {
+        while (inBoundsNoError()) {
             if (at(contents) != '\n') {
                 buffer_ += at(contents);
             }
@@ -86,9 +86,18 @@ class NNParser {
 
             incrementCursor();
         }
+
+        if (DEBUG) {
+            std::cout << "Finished parsing" << std::endl;
+        }
     }
 
    private:
+    struct VariableDefinition {
+        std::string op_name;
+        std::vector<std::string> args;
+    };
+
     bool isAlphanumeric(char c) {
         return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_';
     }
@@ -122,7 +131,7 @@ class NNParser {
 
     void incrementCursor() {
         cursor_++;
-        inBounds();  // safety check
+        inBoundsNoError();  // safety check
 
         if (DEBUG == 2) {
             std::cout << "cursor incremented to " << cursor_ << std::endl;
@@ -139,6 +148,8 @@ class NNParser {
 
         return in;
     }
+
+    bool inBoundsNoError() { return cursor_ < content_size_; }
 
     char at(const std::string& contents) { return contents[cursor_]; }
 
@@ -187,7 +198,7 @@ class NNParser {
         return variable_name;
     }
 
-    std::string registerVariableDefinition(const std::string& contents) {
+    VariableDefinition registerVariableDefinition(const std::string& contents) {
         // the definition MUST start with an op
         // so we start with looking for the end of the op name,
         // which is either a `;` or `(`
@@ -228,7 +239,7 @@ class NNParser {
                     } else if (Operations::valid(arg_buffer)) {
                         // this arg is the result of an operation
                         // get the result and attach it here
-                        arg_buffer = registerVariableDefinition(contents);
+                        arg_buffer = registerVariableDefinition(contents).op_name;
                         args.push_back(arg_buffer);
                         arg_buffer = "";
                     } else if (registered_variables.find(arg_buffer) != registered_variables.end()) {
@@ -278,7 +289,7 @@ class NNParser {
 
         buffer_ += at(contents);
 
-        return op_name;
+        return VariableDefinition{op_name, args};
     }
 
     std::string buffer_;
