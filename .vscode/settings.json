@@ -6,6 +6,10 @@
     "files.associations": {
         "*.cpp": "cpp",
         "vector": "cpp",
-        "mutex": "cpp"
-    }
+        "mutex": "cpp",
+        "ostream": "cpp",
+        "sstream": "cpp",
+        "utility": "cpp"
+    },
+    "editor.formatOnSave": true
 }

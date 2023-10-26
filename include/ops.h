@@ -1,3 +1,6 @@
+#ifndef OPS
+#define OPS
+
 #include <unordered_set>
 
 class Operations {
@@ -18,3 +21,5 @@ const std::string Operations::CONSTANT = "constant";
 
 const std::unordered_set<std::string> Operations::values_ = {Operations::TENSOR, Operations::MATMUL,
                                                              Operations::CONSTANT};
+
+#endif  // define OPS

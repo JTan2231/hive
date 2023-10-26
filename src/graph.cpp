@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <climits>
 #include <iostream>
 #include <map>
@@ -9,7 +10,7 @@
 
 // change this lol
 #include "buffer.cpp"
-#include "ops.cpp"
+#include "ops.h"
 #include "string_utils.cpp"
 
 class Node;
@@ -35,8 +36,25 @@ class Node {
     friend class Graph;
 };
 
+std::string randomString(size_t length) {
+    auto randchar = []() -> char {
+        const char charset[] =
+            "0123456789"
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            "abcdefghijklmnopqrstuvwxyz";
+        const size_t max_index = (sizeof(charset) - 1);
+        return charset[rand() % max_index];
+    };
+
+    std::string str(length, 0);
+    std::generate_n(str.begin(), length, randchar);
+    return str;
+}
+
 class Graph {
    public:
+    Graph() {}
+
     std::shared_ptr<Node> newNode() {
         std::shared_ptr<Node> node(new Node(node_index_));
         node_index_++;
@@ -66,6 +84,9 @@ class Graph {
     // e.g.
     //      let A = tensor(256, 512); // this is allowed
     //      let B;                    // this is not allowed
+    //
+    // NOTE: edges_ isn't being updated here
+    //       is it needed as a field?
     std::string createVariable(const std::string& name, const std::string& operation_type,
                                const std::vector<std::string>& arguments) {
         std::shared_ptr<Node> new_node = newNode();
@@ -73,7 +94,11 @@ class Graph {
         new_node->name_ = name;
         new_node->operation_type_ = operation_type;
 
-        variable_map_[name] = new_node;
+        while (new_node->name_.size() == 0 || variable_map_.find(new_node->name_) != variable_map_.end()) {
+            new_node->name_ = name + "_" + randomString(5);
+        }
+
+        variable_map_[new_node->name_] = new_node;
 
         for (const std::string& arg : arguments) {
             if (strings::isNumeric(arg)) {
@@ -85,16 +110,22 @@ class Graph {
                 }
 
                 new_node->children_[arg] = constant_map_[constant];
-            } else if (variable_map_.find(arg) != variable_map_.end()) {
+                edges_[new_node->id_].insert(constant_map_[constant]->id_);
+            } else if (variable_map_.find(alias_map_[arg]) != variable_map_.end()) {
                 // set the pre-existing variable node as a child
-                new_node->children_[arg] = variable_map_[arg];
+                new_node->children_[arg] = variable_map_[alias_map_[arg]];
+                edges_[new_node->id_].insert(variable_map_[alias_map_[arg]]->id_);
             } else {
                 std::cerr << "Graph::createVariable error: argument is neither numeric constant nor existing variable"
                           << std::endl;
+
+                exit(-1);
             }
         }
 
-        return "";
+        alias_map_[name] = new_node->name_;
+
+        return new_node->name_;
     }
 
     void createConstant(int constant) {
@@ -109,6 +140,19 @@ class Graph {
         constant_ptr->operation_type_ = Operations::CONSTANT;
 
         constant_map_[constant] = constant_ptr;
+    }
+
+    bool isVariable(const std::string& name) { return variable_map_.find(alias_map_[name]) != variable_map_.end(); }
+
+    void listNodes() {
+        for (auto& p : variable_map_) {
+            std::cout << p.first << ": " << std::endl;
+            for (auto& n : p.second->children_) {
+                std::cout << "  - " << n.second->name_ << std::endl;
+            }
+
+            std::cout << std::endl;
+        }
     }
 
     // bfs
@@ -158,7 +202,10 @@ class Graph {
     std::map<int, std::shared_ptr<Node>> constant_map_;
     std::map<std::string, std::shared_ptr<Node>> variable_map_;
 
-    int node_index_ = 0;
+    // this is for when a variable is reassigned
+    // e.g. let A = tensor(1, 2)
+    //      A = tensor(3, 4)      // this will have a different alias in the graph
+    std::map<std::string, std::string> alias_map_;
 
-    Graph() {}
+    int node_index_ = 0;
 };
