@@ -1,5 +1,5 @@
-let A = tensor(256, 512);
-let B = tensor(512, 1024);
+let A = tensor(3, 5);
+let B = tensor(5, 12);
 let C = matmul(A, B);
 C = matmul(C, B);
 

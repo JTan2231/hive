@@ -16,6 +16,22 @@
 class Node;
 class Graph;
 
+template <typename T>
+std::string vecToString(const std::vector<T>& vec) {
+    std::ostringstream oss;
+    oss << "[";
+
+    for (size_t i = 0; i < vec.size(); ++i) {
+        oss << vec[i];
+        if (i != vec.size() - 1) {
+            oss << ", ";
+        }
+    }
+
+    oss << "]";
+    return oss.str();
+}
+
 class Node {
    public:
     Node(int id) : id_(id) {}
@@ -25,16 +41,140 @@ class Node {
     std::string operation_type_;
     std::string name_;
 
+    std::vector<std::string> arg_order_;
     std::map<std::string, std::shared_ptr<Node>> children_;
 
     std::map<std::string, std::shared_ptr<Buffer>> inputs_;
-    std::map<std::string, std::shared_ptr<Buffer>> outputs_;
+    std::shared_ptr<Buffer> output_;
+
+    std::vector<int> shape_;
+
+    void printOutput() {
+        std::vector<int> indices(shape_.size(), 0);
+        std::vector<int> end;
+        for (int i : shape_) {
+            end.push_back(i - 1);
+        }
+
+        while (indices != end) {
+            int i = indices.size() - 1;
+            for (int i = indices.size() - 1; i > 0 && indices[i] > end[i]; i--) {
+                indices[i] = 0;
+                indices[i - 1]++;
+
+                std::cout << std::endl;
+            }
+
+            std::cout << output_->getIndex<float>(calculateIndex(indices)) << ", ";
+
+            indices[indices.size() - 1]++;
+        }
+
+        std::cout << output_->getIndex<float>(calculateIndex(end)) << std::endl;
+    }
 
    private:
     int id_;
 
+    size_t calculateIndex(const std::vector<int>& indices) {
+        if (indices.size() != shape_.size()) {
+            std::cerr << "Node::calculateIndex error: indices.size() must be equal to shape_.size(). Got "
+                      << indices.size() << " and " << shape_.size() << std::endl;
+            exit(-1);
+        }
+
+        int shape_prod = 1;
+        for (int i : shape_) {
+            shape_prod *= i;
+        }
+
+        size_t final_index = 0;
+
+        for (int i = 0; i < indices.size(); i++) {
+            shape_prod /= shape_[i];
+            final_index += indices[i] * shape_prod;
+        }
+
+        return final_index;
+    }
+
     friend class Graph;
 };
+
+namespace allocation {
+
+// TODO: shapes need figured out to a cleaner solution
+
+// these functions allocate buffers for their given nodes
+void allocateTensorNode(std::shared_ptr<Node> node) {
+    size_t size = 1;
+    for (const std::string& arg : node->arg_order_) {
+        size *= std::stoi(arg);  // tensor() *should* have all numeric args if it's made it this far
+    }
+
+    node->output_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
+}
+
+// NOTE: broadcasting is currently not supported
+//       this means given inputs MUST be the same shape,
+//       save for the last two dimensions
+void allocateMatmulNode(std::shared_ptr<Node> node) {
+    if (node->arg_order_.size() != 2) {
+        std::cerr << "allocateMatmulNode error: matmul node has <> 2 args, how did this happen?" << std::endl;
+        exit(-1);
+    }
+
+    size_t size = 1;
+    std::vector<int> shape_a, shape_b;
+    shape_a = node->children_[node->arg_order_[0]]->shape_;
+    shape_b = node->children_[node->arg_order_[1]]->shape_;
+
+    if (shape_a.size() != shape_b.size()) {
+        std::cerr << "allocateMatmulNode error: argument shapes must be equal in size. Got " << vecToString(shape_a)
+                  << " and " << vecToString(shape_b) << std::endl;
+        exit(-1);
+    }
+
+    int n = shape_a.size();
+    for (int i = 0; i < n - 2; i++) {
+        if (shape_a[i] != shape_b[i]) {
+            std::cerr << "allocateMatmulNode error: shapes must be equal until the final two dimensions [N - 2, N - 1]"
+                      << std::endl;
+            exit(-1);
+        }
+
+        size *= shape_a[i];
+    }
+
+    std::vector<int> new_shape = shape_a;
+    new_shape[n - 2] = shape_a[n - 2];
+    new_shape[n - 1] = shape_b[n - 1];
+
+    size *= shape_a[n - 2] * shape_b[n - 1];
+
+    node->output_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
+    node->shape_ = new_shape;
+}
+
+// all constants will be assumed to be 32-bit float values
+void allocateConstantNode(std::shared_ptr<Node> node) {
+    node->output_ = std::shared_ptr<Buffer>(new Buffer(1, DTYPE::float32));
+
+    float value = std::stof(node->name_);
+    node->output_->setIndex(0, (void*)(&value));
+}
+
+void allocateNode(std::shared_ptr<Node> node) {
+    if (node->operation_type_ == Operations::TENSOR) {
+        allocateTensorNode(node);
+    } else if (node->operation_type_ == Operations::MATMUL) {
+        allocateMatmulNode(node);
+    } else if (node->operation_type_ == Operations::CONSTANT) {
+        allocateConstantNode(node);
+    }
+}
+
+}  // namespace allocation
 
 std::string randomString(size_t length) {
     auto randchar = []() -> char {
@@ -93,6 +233,7 @@ class Graph {
 
         new_node->name_ = name;
         new_node->operation_type_ = operation_type;
+        new_node->arg_order_ = arguments;
 
         while (new_node->name_.size() == 0 || variable_map_.find(new_node->name_) != variable_map_.end()) {
             new_node->name_ = name + "_" + randomString(5);
@@ -111,6 +252,11 @@ class Graph {
 
                 new_node->children_[arg] = constant_map_[constant];
                 edges_[new_node->id_].insert(constant_map_[constant]->id_);
+
+                // there's gotta be a better way to do this
+                if (operation_type == Operations::TENSOR) {
+                    new_node->shape_.push_back(constant);
+                }
             } else if (variable_map_.find(alias_map_[arg]) != variable_map_.end()) {
                 // set the pre-existing variable node as a child
                 new_node->children_[arg] = variable_map_[alias_map_[arg]];
@@ -124,6 +270,12 @@ class Graph {
         }
 
         alias_map_[name] = new_node->name_;
+
+        std::cout << "<<== BEGINNING ALLOCATION OF NODE " << new_node->name_ << " WITH TYPE "
+                  << new_node->operation_type_ << std::endl;
+        allocation::allocateNode(new_node);
+        std::cout << "ALLOCATED NODE " << new_node->name_ << " WITH SHAPE " << vecToString(new_node->shape_)
+                  << std::endl;
 
         return new_node->name_;
     }
@@ -146,11 +298,19 @@ class Graph {
 
     void listNodes() {
         for (auto& p : variable_map_) {
-            std::cout << p.first << ": " << std::endl;
-            for (auto& n : p.second->children_) {
-                std::cout << "  - " << n.second->name_ << std::endl;
+            std::cout << p.first << " " << vecToString(p.second->shape_) << ": " << std::endl;
+            for (const std::string& n : p.second->arg_order_) {
+                std::cout << "  - " << n << std::endl;
             }
 
+            std::cout << std::endl;
+        }
+    }
+
+    void printNodeValues() {
+        for (auto& p : variable_map_) {
+            std::cout << p.first << " " << vecToString(p.second->shape_) << ": " << std::endl;
+            p.second->printOutput();
             std::cout << std::endl;
         }
     }

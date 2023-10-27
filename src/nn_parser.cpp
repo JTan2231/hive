@@ -173,7 +173,7 @@ class NNParser {
 
         if (DEBUG) {
             std::cout << "Finished parsing" << std::endl;
-            graph.listNodes();
+            graph.printNodeValues();
         }
     }
 
@@ -315,7 +315,7 @@ class NNParser {
                     } else if (Operations::valid(arg_buffer)) {
                         // this arg is the result of an operation
                         // get the result and attach it here
-                        arg_buffer = registerVariableDefinition(arg_buffer, contents, false);
+                        arg_buffer = registerVariableDefinition(arg_buffer, contents, true);
                         args.push_back(arg_buffer);
                         arg_buffer = "";
                     } else if (registered_variables.find(arg_buffer) != registered_variables.end()) {
