@@ -4,6 +4,7 @@
 #include <map>
 #include <memory>
 #include <queue>
+#include <random>
 #include <set>
 #include <utility>
 #include <vector>
@@ -16,20 +17,15 @@
 class Node;
 class Graph;
 
-template <typename T>
-std::string vecToString(const std::vector<T>& vec) {
-    std::ostringstream oss;
-    oss << "[";
+// probably needs moved
+void generateNormalDistribution(std::vector<float>& output) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::normal_distribution<float> dis(0, 1);
 
-    for (size_t i = 0; i < vec.size(); ++i) {
-        oss << vec[i];
-        if (i != vec.size() - 1) {
-            oss << ", ";
-        }
+    for (int i = 0; i < output.size(); i++) {
+        output[i] = dis(gen);
     }
-
-    oss << "]";
-    return oss.str();
 }
 
 class Node {
@@ -130,8 +126,8 @@ void allocateMatmulNode(std::shared_ptr<Node> node) {
     shape_b = node->children_[node->arg_order_[1]]->shape_;
 
     if (shape_a.size() != shape_b.size()) {
-        std::cerr << "allocateMatmulNode error: argument shapes must be equal in size. Got " << vecToString(shape_a)
-                  << " and " << vecToString(shape_b) << std::endl;
+        std::cerr << "allocateMatmulNode error: argument shapes must be equal in size. Got "
+                  << strings::vecToString(shape_a) << " and " << strings::vecToString(shape_b) << std::endl;
         exit(-1);
     }
 
@@ -164,6 +160,23 @@ void allocateConstantNode(std::shared_ptr<Node> node) {
     node->output_->setIndex(0, (void*)(&value));
 }
 
+void allocateNormalNode(std::shared_ptr<Node> node) {
+    allocateTensorNode(node);
+    std::shared_ptr<Buffer> buf = node->output_;
+
+    if (buf->dtype() != DTYPE::float32) {
+        std::cerr << "allocation::allocateNormalNode error: buffer data type must be float32" << std::endl;
+        exit(-1);
+    }
+
+    std::vector<float> data(buf->size());
+    generateNormalDistribution(data);
+
+    for (size_t i = 0; i < buf->size(); i++) {
+        buf->setIndex(i, (void*)(&data[i]));
+    }
+}
+
 void allocateNode(std::shared_ptr<Node> node) {
     if (node->operation_type_ == Operations::TENSOR) {
         allocateTensorNode(node);
@@ -171,6 +184,8 @@ void allocateNode(std::shared_ptr<Node> node) {
         allocateMatmulNode(node);
     } else if (node->operation_type_ == Operations::CONSTANT) {
         allocateConstantNode(node);
+    } else if (node->operation_type_ == Operations::NORMAL) {
+        allocateNormalNode(node);
     }
 }
 
@@ -271,11 +286,7 @@ class Graph {
 
         alias_map_[name] = new_node->name_;
 
-        std::cout << "<<== BEGINNING ALLOCATION OF NODE " << new_node->name_ << " WITH TYPE "
-                  << new_node->operation_type_ << std::endl;
         allocation::allocateNode(new_node);
-        std::cout << "ALLOCATED NODE " << new_node->name_ << " WITH SHAPE " << vecToString(new_node->shape_)
-                  << std::endl;
 
         return new_node->name_;
     }
@@ -298,7 +309,7 @@ class Graph {
 
     void listNodes() {
         for (auto& p : variable_map_) {
-            std::cout << p.first << " " << vecToString(p.second->shape_) << ": " << std::endl;
+            std::cout << p.first << " " << strings::vecToString(p.second->shape_) << ": " << std::endl;
             for (const std::string& n : p.second->arg_order_) {
                 std::cout << "  - " << n << std::endl;
             }
@@ -309,7 +320,7 @@ class Graph {
 
     void printNodeValues() {
         for (auto& p : variable_map_) {
-            std::cout << p.first << " " << vecToString(p.second->shape_) << ": " << std::endl;
+            std::cout << p.first << " " << strings::vecToString(p.second->shape_) << ": " << std::endl;
             p.second->printOutput();
             std::cout << std::endl;
         }

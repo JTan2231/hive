@@ -8,6 +8,7 @@ class Operations {
     static const std::string TENSOR;
     static const std::string MATMUL;
     static const std::string CONSTANT;
+    static const std::string NORMAL;
 
     static bool valid(const std::string& value) { return values_.find(value) != values_.end(); }
 
@@ -18,8 +19,9 @@ class Operations {
 const std::string Operations::TENSOR = "tensor";
 const std::string Operations::MATMUL = "matmul";
 const std::string Operations::CONSTANT = "constant";
+const std::string Operations::NORMAL = "normal";
 
 const std::unordered_set<std::string> Operations::values_ = {Operations::TENSOR, Operations::MATMUL,
-                                                             Operations::CONSTANT};
+                                                             Operations::CONSTANT, Operations::NORMAL};
 
 #endif  // define OPS

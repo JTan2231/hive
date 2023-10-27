@@ -4,6 +4,8 @@
 #include "dtypes.h"
 
 class Buffer {
+    // number of elements of type dtype_
+    // does NOT represent the number of bits/bytes
     size_t size_;
     void* data_;
 
@@ -14,6 +16,9 @@ class Buffer {
         data_ = malloc(size * dtypes::dtypeSize(dtype));
         memset(data_, 0, size * dtypes::dtypeSize(dtype));
     }
+
+    size_t size() { return size_; }
+    DTYPE dtype() { return dtype_; }
 
     void* getData() { return data_; }
 
