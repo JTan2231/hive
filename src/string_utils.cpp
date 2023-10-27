@@ -1,8 +1,18 @@
+#include "string_utils.h"
+
+#include <algorithm>
+#include <cstddef>
+#include <iostream>
+#include <random>
+#include <sstream>
 #include <string>
+#include <vector>
 
 namespace strings {
 
-bool isAlphanumeric(char c) { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_'; }
+bool isAlphanumeric(char c) {
+    return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_';
+}
 
 // misleading function name
 // punctuation counts as numeric here
@@ -31,20 +41,19 @@ std::string strip(const std::string& s) {
     return stripped;
 }
 
-template <typename T>
-std::string vecToString(const std::vector<T>& vec) {
-    std::ostringstream oss;
-    oss << "[";
+std::string randomString(size_t length) {
+    auto randchar = []() -> char {
+        const char charset[] =
+            "0123456789"
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            "abcdefghijklmnopqrstuvwxyz";
+        const size_t max_index = (sizeof(charset) - 1);
+        return charset[rand() % max_index];
+    };
 
-    for (size_t i = 0; i < vec.size(); ++i) {
-        oss << vec[i];
-        if (i != vec.size() - 1) {
-            oss << ", ";
-        }
-    }
-
-    oss << "]";
-    return oss.str();
+    std::string str(length, 0);
+    std::generate_n(str.begin(), length, randchar);
+    return str;
 }
 
 }  // namespace strings

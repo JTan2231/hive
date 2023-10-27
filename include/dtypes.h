@@ -1,8 +1,13 @@
+#ifndef DTYPES
+#define DTYPES
+
+#include <cstddef>
+
 enum class DTYPE { float32, float64 };
 
 namespace dtypes {
 
-size_t dtypeSize(DTYPE dtype) {
+static size_t dtypeSize(DTYPE dtype) {
     if (dtype == DTYPE::float32) {
         return sizeof(float);
     }
@@ -14,6 +19,10 @@ size_t dtypeSize(DTYPE dtype) {
     return 0;
 }
 
-float* toFloat32(void* ptr) { return (float*)ptr; }
+static float* toFloat32(void* ptr) {
+    return (float*)ptr;
+}
 
 }  // namespace dtypes
+
+#endif
