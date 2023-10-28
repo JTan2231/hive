@@ -15,7 +15,8 @@
 #include "graph.h"
 #include "ops.h"
 
-#define DEBUG 1
+// this should probably be moved
+#define DEBUG 0
 
 namespace nn_parser {
 
@@ -66,7 +67,7 @@ class NNParser {
     // TODO: this should return a (as of yet unmade) computational graph object
     // TODO: handle variable reassignment
     // TODO: variables as arguments? how are those being handled?
-    void parse(const std::string& contents);
+    Graph parse(const std::string& contents);
 
    private:
     bool isAlphanumeric(char c);

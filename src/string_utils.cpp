@@ -10,9 +10,7 @@
 
 namespace strings {
 
-bool isAlphanumeric(char c) {
-    return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_';
-}
+bool isAlphanumeric(char c) { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_'; }
 
 // misleading function name
 // punctuation counts as numeric here
@@ -53,6 +51,7 @@ std::string randomString(size_t length) {
 
     std::string str(length, 0);
     std::generate_n(str.begin(), length, randchar);
+
     return str;
 }
 

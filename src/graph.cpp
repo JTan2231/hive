@@ -13,14 +13,13 @@
 
 #include "allocation.h"
 #include "buffer.h"
+#include "kernel.h"
 #include "ops.h"
 #include "string_utils.h"
 
 Node::Node(int id) : id_(id) {}
 
-int Node::getId() {
-    return id_;
-}
+int Node::getId() { return id_; }
 
 void Node::printOutput() {
     std::vector<int> indices(shape_.size(), 0);
@@ -38,34 +37,12 @@ void Node::printOutput() {
             std::cout << std::endl;
         }
 
-        std::cout << output_->getIndex<float>(calculateIndex(indices)) << ", ";
+        std::cout << output_->getIndex<float>(calculateIndex(indices, shape_)) << ", ";
 
         indices[indices.size() - 1]++;
     }
 
-    std::cout << output_->getIndex<float>(calculateIndex(end)) << std::endl;
-}
-
-size_t Node::calculateIndex(const std::vector<int>& indices) {
-    if (indices.size() != shape_.size()) {
-        std::cerr << "Node::calculateIndex error: indices.size() must be equal to shape_.size(). Got " << indices.size()
-                  << " and " << shape_.size() << std::endl;
-        exit(-1);
-    }
-
-    int shape_prod = 1;
-    for (int i : shape_) {
-        shape_prod *= i;
-    }
-
-    size_t final_index = 0;
-
-    for (int i = 0; i < indices.size(); i++) {
-        shape_prod /= shape_[i];
-        final_index += indices[i] * shape_prod;
-    }
-
-    return final_index;
+    std::cout << output_->getIndex<float>(calculateIndex(end, shape_)) << std::endl;
 }
 
 Graph::Graph() {}
@@ -165,8 +142,48 @@ void Graph::createConstant(int constant) {
     constant_map_[constant] = constant_ptr;
 }
 
-bool Graph::isVariable(const std::string& name) {
-    return variable_map_.find(alias_map_[name]) != variable_map_.end();
+bool Graph::isVariable(const std::string& name) { return variable_map_.find(alias_map_[name]) != variable_map_.end(); }
+
+// topological sort
+// the number of edges a node has is determined by how many of its children's subgraphs are fully evaluated
+// e.g. if a connected node has a fully calculated value, its edge is not taken into consideration
+//      for topological sort
+void Graph::evaluate() {
+    std::map<std::string, int> degrees;
+    std::queue<std::shared_ptr<Node>> q;
+
+    std::map<std::string, std::set<std::string>> dependency_map;
+
+    for (const auto& p : nodes_) {
+        degrees[p.second->name_] = p.second->children_.size();
+        if (p.second->children_.empty()) {
+            q.push(p.second);
+        }
+
+        // have to invert the graph
+        // for a bottom-up evaluation
+        for (auto& cp : p.second->children_) {
+            dependency_map[cp.first].insert(p.second->name_);
+        }
+    }
+
+    std::shared_ptr<Node> current;
+    while (!q.empty()) {
+        current = q.front();
+        q.pop();
+
+        kernel::computeNode(current);
+
+        for (const auto& dependent : dependency_map[current->name_]) {
+            degrees[dependent]--;
+
+            if (degrees[dependent] == 0) {
+                // constants have no incoming edges
+                // so this will *always* be a variable
+                q.push(variable_map_[dependent]);
+            }
+        }
+    }
 }
 
 void Graph::listNodes() {
@@ -185,45 +202,5 @@ void Graph::printNodeValues() {
         std::cout << p.first << " " << strings::vecToString(p.second->shape_) << ": " << std::endl;
         p.second->printOutput();
         std::cout << std::endl;
-    }
-}
-
-// bfs
-// assuming the graph is directed and acyclic
-void Graph::debugTraversal() {
-    std::map<int, int> incoming_counts;
-    for (auto& p : edges_) {
-        for (int edge : p.second) {
-            incoming_counts[edge]++;
-        }
-    }
-
-    int root = 0;
-    int min_edges = INT_MAX;
-    for (auto& p : incoming_counts) {
-        if (p.second < min_edges) {
-            root = p.first;
-            min_edges = p.second;
-        }
-    }
-
-    std::queue<int> q;
-    q.push(root);
-
-    int level = 0;
-    while (!q.empty()) {
-        int n = q.size();
-
-        for (int i = 0; i < n; i++) {
-            std::shared_ptr<Node> current = nodes_[q.front()];
-            q.pop();
-
-            std::cout << "level, id, name, type: " << level << ", " << current->getId() << ", " << current->name_
-                      << ", " << current->operation_type_ << std::endl;
-
-            for (auto& p : current->children_) {
-                q.push(p.second->getId());
-            }
-        }
     }
 }

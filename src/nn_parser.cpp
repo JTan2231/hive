@@ -14,8 +14,6 @@
 #include "graph.h"
 #include "ops.h"
 
-#define DEBUG 1
-
 namespace nn_parser {
 
 std::vector<std::string> split(const std::string& s, const std::string& delimiter) {
@@ -48,7 +46,7 @@ std::string readFile(const std::string& filepath) {
 // and spits out a computational graph for computing it
 NNParser::NNParser(size_t content_size) : content_size_(content_size), cursor_(0), line_(1), buffer_("") {}
 NNParser::NNParser(std::string contents) : content_size_(contents.size()), cursor_(0), line_(1), buffer_("") {
-    lines_ = split(contents, "\r");
+    lines_ = split(contents, "\n");
 }
 
 NNParser::~NNParser() {}
@@ -56,7 +54,7 @@ NNParser::~NNParser() {}
 // TODO: this should return a (as of yet unmade) computational graph object
 // TODO: handle variable reassignment
 // TODO: variables as arguments? how are those being handled?
-void NNParser::parse(const std::string& contents) {
+Graph NNParser::parse(const std::string& contents) {
     // order of operations when looking at a file
     // we are looking for
     //   - a variable decalaration
@@ -68,15 +66,24 @@ void NNParser::parse(const std::string& contents) {
 
         if (at(contents) == ';') {
             if (DEBUG) {
-                std::cout << " -- finished line " << line_ << ": " << trim(lines_[line_ - 1]) << std::endl;
+                std::cout << "-- finished line " << line_ << ": " << std::endl << trim(lines_[line_ - 1]) << std::endl;
             }
 
             buffer_ = "";
             line_++;
 
+            incrementCursor();
             while (std::isspace(at(contents))) {
                 incrementCursor();
             }
+
+            buffer_ += at(contents);
+        } else if (at(contents) == '\n') {
+            if (DEBUG) {
+                std::cout << "-- finished line " << line_ << ": " << std::endl << trim(lines_[line_ - 1]) << std::endl;
+            }
+
+            line_++;
         }
 
         buffer_ = trim(buffer_);
@@ -144,6 +151,8 @@ void NNParser::parse(const std::string& contents) {
         std::cout << "Finished parsing" << std::endl;
         graph.printNodeValues();
     }
+
+    return graph;
 }
 
 bool NNParser::isAlphanumeric(char c) {
@@ -197,13 +206,9 @@ bool NNParser::inBounds() {
     return in;
 }
 
-bool NNParser::inBoundsNoError() {
-    return cursor_ < content_size_;
-}
+bool NNParser::inBoundsNoError() { return cursor_ < content_size_; }
 
-char NNParser::at(const std::string& contents) {
-    return contents[cursor_];
-}
+char NNParser::at(const std::string& contents) { return contents[cursor_]; }
 
 void NNParser::incrementAndAdd(const std::string& contents) {
     incrementCursor();

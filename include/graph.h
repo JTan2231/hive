@@ -31,7 +31,6 @@ class Node {
     std::vector<std::string> arg_order_;
     std::map<std::string, std::shared_ptr<Node>> children_;
 
-    std::map<std::string, std::shared_ptr<Buffer>> inputs_;
     std::shared_ptr<Buffer> output_;
 
     std::vector<int> shape_;
@@ -40,8 +39,6 @@ class Node {
 
    private:
     int id_;
-
-    size_t calculateIndex(const std::vector<int>& indices);
 
     friend class Graph;
 };
@@ -70,13 +67,12 @@ class Graph {
 
     bool isVariable(const std::string& name);
 
+    // topological sort to compute the graph
+    void evaluate();
+
     void listNodes();
 
     void printNodeValues();
-
-    // bfs
-    // assuming the graph is directed and acyclic
-    void debugTraversal();
 
    private:
     std::map<int, std::set<int>> edges_;          // id -> { neighbor_ids... } outgoing edges

@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstring>
+#include <vector>
 
 #include "dtypes.h"
 
@@ -33,5 +34,7 @@ class Buffer {
         return *(((T*)data_) + index);
     }
 };
+
+size_t calculateIndex(const std::vector<int>& indices, const std::vector<int>& shape);
 
 #endif

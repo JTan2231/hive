@@ -1,13 +1,12 @@
+# Ignore all files without extensions
+*
+!**/
+!*.*
+
 # clangd lsp
 .clang-format
 .cache
 
 # build artifacts
 compile_commands.json
-Hivemind
-node
-test
-client
-server
-parser
 *.exe

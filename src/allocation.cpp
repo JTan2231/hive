@@ -9,6 +9,18 @@
 #include "ops.h"
 #include "string_utils.h"
 
+// TODO: where should we put this?
+template <typename T>
+void printVec(const std::string& name, std::vector<T> v) {
+    if (name.size() > 0) {
+        std::cout << name << ": " << std::endl;
+    }
+
+    for (T& i : v) {
+        std::cout << i << std::endl;
+    }
+}
+
 namespace allocation {
 
 // TODO: shapes need figured out to a cleaner solution
@@ -16,11 +28,16 @@ namespace allocation {
 // these functions allocate buffers for their given nodes
 void allocateTensorNode(std::shared_ptr<Node> node) {
     size_t size = 1;
+    std::vector<int> shape;
     for (const std::string& arg : node->arg_order_) {
-        size *= std::stoi(arg);  // tensor() *should* have all numeric args if it's made it this far
+        int dim = std::stoi(arg);  // tensor() *should* have all numeric args if it's made it this far
+
+        size *= dim;
+        shape.push_back(dim);
     }
 
     node->output_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
+    node->shape_ = shape;
 }
 
 // NOTE: broadcasting is currently not supported
@@ -34,6 +51,7 @@ void allocateMatmulNode(std::shared_ptr<Node> node) {
 
     size_t size = 1;
     std::vector<int> shape_a, shape_b;
+
     shape_a = node->children_[node->arg_order_[0]]->shape_;
     shape_b = node->children_[node->arg_order_[1]]->shape_;
 
@@ -55,8 +73,15 @@ void allocateMatmulNode(std::shared_ptr<Node> node) {
     }
 
     std::vector<int> new_shape = shape_a;
+
     new_shape[n - 2] = shape_a[n - 2];
     new_shape[n - 1] = shape_b[n - 1];
+
+    if (shape_a[n - 1] != shape_b[n - 2]) {
+        std::cerr << "allocatedMatmulNode error: incompatible shapes for matrix multiplication. Got "
+                  << strings::vecToString(shape_a) << " and " << strings::vecToString(shape_b) << std::endl;
+        exit(-1);
+    }
 
     size *= shape_a[n - 2] * shape_b[n - 1];
 
