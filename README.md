@@ -1,4 +1,4 @@
-# hivemind
+# Hive
 Distributed computing for large language models.
 
 ## Note
