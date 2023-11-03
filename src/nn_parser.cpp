@@ -13,6 +13,7 @@
 
 #include "graph.h"
 #include "ops.h"
+#include "string_utils.h"
 
 namespace nn_parser {
 
@@ -101,6 +102,8 @@ Graph NNParser::parse(const std::string& contents) {
 
                 if (at(contents) != '=') {
                     std::cerr << "parsing error: expected = sign" << std::endl;
+                    showCursor(contents);
+                    exit(-1);
                 }
 
                 buffer_ += at(contents);
@@ -114,8 +117,9 @@ Graph NNParser::parse(const std::string& contents) {
 
                 // cursor should be left at the start of the variable
                 // definition
-                // TODO
                 registerVariableDefinition(variable_name, contents, false);
+
+                buffer_ = "";
             }
         } else if (graph.isVariable(buffer_)) {
             std::string variable_name = buffer_;
@@ -126,7 +130,9 @@ Graph NNParser::parse(const std::string& contents) {
             }
 
             if (at(contents) != '=') {
-                std::cerr << "parsing error: expected = sign" << std::endl;
+                std::cerr << strings::error("parsing error:") << " expected = sign" << std::endl;
+                showCursor(contents);
+                exit(-1);
             }
 
             buffer_ += at(contents);
@@ -140,8 +146,8 @@ Graph NNParser::parse(const std::string& contents) {
 
             // cursor should be left at the start of the variable
             // definition
-            // TODO
             registerVariableDefinition(variable_name, contents, false);
+            buffer_ = "";
         } else {
             incrementCursor();
         }
@@ -210,6 +216,10 @@ bool NNParser::inBoundsNoError() {
     return cursor_ < content_size_;
 }
 
+void NNParser::showCursor(const std::string& contents) {
+    std::cout << strings::info("cursor is at the end of: ") << contents.substr(cursor_ - 10, 11) << std::endl;
+}
+
 char NNParser::at(const std::string& contents) {
     return contents[cursor_];
 }
@@ -235,6 +245,7 @@ std::string NNParser::registerVariableName(const std::string& contents) {
         if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) {
             std::cerr << "parsing error: invalid character `" << c << "` in variable name" << std::endl;
 
+            showCursor(contents);
             exit(-1);
         }
 
@@ -284,7 +295,8 @@ std::string NNParser::registerVariableDefinition(std::string variable_name, cons
         // only expecting integer arguments for now
         // might change in the future
         std::string arg_buffer = "";
-        while (inBounds() && at(contents) != ')') {
+        // this condition could probably be better generalized
+        while (inBoundsNoError() && at(contents) != ')' && at(contents) != ';' && at(contents) != '\n') {
             arg_buffer += at(contents);
             buffer_ += at(contents);
             if (at(contents) == ',' || at(contents) == '(') {
@@ -304,29 +316,37 @@ std::string NNParser::registerVariableDefinition(std::string variable_name, cons
                     // link the variable here
                     args.push_back(arg_buffer);
                     arg_buffer = "";
+                } else {
+                    std::cerr << strings::error("NNParser:registerVariableDefinition error: ")
+                              << "expected expression, variable, or value " << std::endl;
+
+                    showCursor(contents);
+                    exit(-1);
                 }
             }
-
-            // TODO: error handling for when the arg isn't an expression, variable, or value
 
             incrementCursor();
         }
 
+        arg_buffer = strip(arg_buffer);
         if (arg_buffer.size() > 0) {
-            args.push_back(strip(arg_buffer));
+            args.push_back(arg_buffer);
         }
     } else if (args.size() == 0) {
-        std::cerr << "NNParser::registerVariableDefinition error: expected "
-                     "operator arguments"
+        std::cerr << strings::error("NNParser::registerVariableDefinition error:") << " expected operator arguments"
                   << std::endl;
+
+        showCursor(contents);
         exit(-1);
     }
 
-    buffer_ += at(contents);
+    if (inBoundsNoError()) {
+        buffer_ += at(contents);
+    }
 
     std::string variable_node_name = graph.createVariable(variable_name, op_name, args);
 
-    if (at(contents) == ')') {
+    if (inBoundsNoError() && at(contents) == ')') {
         incrementCursor();
     }
 

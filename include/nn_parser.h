@@ -87,6 +87,8 @@ class NNParser {
 
     bool inBoundsNoError();
 
+    void showCursor(const std::string& contents);
+
     char at(const std::string& contents);
 
     void incrementAndAdd(const std::string& contents);

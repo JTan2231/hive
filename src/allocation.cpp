@@ -29,16 +29,12 @@ namespace allocation {
 void tensorAllocate(std::shared_ptr<Node> node) {
     size_t size = 1;
     std::vector<int> shape;
-    std::cout << "ALLOCATING FOR NODE OF TYPE " << node->operation_type_ << std::endl;
     for (const std::string& arg : node->arg_order_) {
-        std::cout << "  - ARG: " << arg << std::endl;
         int dim = std::stoi(arg);  // tensor() *should* have all numeric args if it's made it this far
 
         size *= dim;
         shape.push_back(dim);
     }
-
-    std::cout << "FINISHED" << std::endl;
 
     node->output_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
     node->shape_ = shape;

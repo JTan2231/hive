@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -23,6 +24,16 @@ int Node::getId() {
     return id_;
 }
 
+std::string _node_format(float x) {
+    constexpr int precision = 6;
+    constexpr int width = precision + 4;  // decimal point + integer part (assuming 2 digits) + sign
+
+    std::stringstream stream;
+    stream << std::fixed << std::setw(width) << std::setprecision(precision) << x;
+
+    return stream.str();
+}
+
 void Node::printOutput() {
     std::vector<int> indices(shape_.size(), 0);
     std::vector<int> end;
@@ -30,21 +41,24 @@ void Node::printOutput() {
         end.push_back(i - 1);
     }
 
+    std::cout << "    ";
     while (indices != end) {
         int i = indices.size() - 1;
         for (int i = indices.size() - 1; i > 0 && indices[i] > end[i]; i--) {
             indices[i] = 0;
             indices[i - 1]++;
 
-            std::cout << std::endl;
+            std::cout << std::endl << "    ";
         }
 
-        std::cout << output_->getIndex<float>(calculateIndex(indices, shape_)) << ", ";
+        std::string output = _node_format(output_->getIndex<float>(calculateIndex(indices, shape_)));
+
+        std::cout << strings::debug(output + ", ");
 
         indices[indices.size() - 1]++;
     }
 
-    std::cout << output_->getIndex<float>(calculateIndex(end, shape_)) << std::endl;
+    std::cout << strings::debug(_node_format(output_->getIndex<float>(calculateIndex(end, shape_)))) << std::endl;
 }
 
 Graph::Graph() {}
@@ -113,6 +127,10 @@ std::string Graph::createVariable(const std::string& name, const std::string& op
             // set the pre-existing variable node as a child
             new_node->children_[arg] = variable_map_[alias_map_[arg]];
             edges_[new_node->id_].insert(variable_map_[alias_map_[arg]]->id_);
+        } else if (variable_map_.find(arg) != variable_map_.end()) {
+            // set the pre-existing variable node as a child
+            new_node->children_[arg] = variable_map_[arg];
+            edges_[new_node->id_].insert(variable_map_[arg]->id_);
         } else {
             std::cerr << "Graph::createVariable error: argument is neither numeric constant nor existing variable"
                       << std::endl;
@@ -190,9 +208,12 @@ void Graph::evaluate() {
 
 void Graph::listNodes() {
     for (auto& p : variable_map_) {
-        std::cout << p.first << " " << strings::vecToString(p.second->shape_) << ": " << std::endl;
+        std::cout << strings::info(p.first + " " + strings::vecToString(p.second->shape_)) << ": " << std::endl;
+        std::cout << "  - " << strings::debug("operation type: ") << p.second->operation_type_ << std::endl;
+
+        std::cout << "  - " << strings::debug("inputs: ") << std::endl;
         for (const std::string& n : p.second->arg_order_) {
-            std::cout << "  - " << n << std::endl;
+            std::cout << "    - " << strings::info(n) << std::endl;
         }
 
         std::cout << std::endl;
@@ -201,7 +222,7 @@ void Graph::listNodes() {
 
 void Graph::printNodeValues() {
     for (auto& p : variable_map_) {
-        std::cout << p.first << " " << strings::vecToString(p.second->shape_) << ": " << std::endl;
+        std::cout << strings::info(p.first + " " + strings::vecToString(p.second->shape_) + ": ") << std::endl;
         p.second->printOutput();
         std::cout << std::endl;
     }

@@ -37,6 +37,10 @@ std::string vecToString(const std::vector<T>& vec) {
 
 std::string randomString(size_t length);
 
+std::string error(std::string s);
+std::string info(std::string s);
+std::string debug(std::string s);
+
 }  // namespace strings
 
 #endif

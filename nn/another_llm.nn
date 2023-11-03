@@ -4,6 +4,6 @@ let b = normal(5, 7);
 let c = matmul(a, b);
 let d = normal(7, 3);
 
-let e = matmul(d, c);
-e = sigmoid(e);
+let e = sigmoid(sigmoid(matmul(d, c)));
 e = relu(e);
+e = matmul(e, d);
