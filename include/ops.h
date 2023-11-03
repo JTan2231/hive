@@ -36,6 +36,12 @@ class OperationRegistry {
     }
 };
 
+// two things are required for an operation registration:
+//   - a function for the kernel computation
+//   - a function for memory allocation
+//
+// operation names are accessible through the operations namespace
+// e.g. operations::tensor
 #define REGISTER_OPERATION(name)                                                                           \
     namespace kernel {                                                                                     \
     void name(std::shared_ptr<Node>);                                                                      \
