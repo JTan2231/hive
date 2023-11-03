@@ -12,13 +12,14 @@ namespace kernel {
 // TODO: how will broadcasting be handled?
 
 void computeNode(std::shared_ptr<Node> node) {
-    const std::string& opt = node->operation_type_;
-    if (opt == Operations::TENSOR || opt == Operations::CONSTANT || opt == Operations::NORMAL) {
-        constant(node);
-    } else if (opt == Operations::MATMUL) {
-        matmul(node);
+    const auto& operationMap = OperationRegistry::GetOperationMap();
+
+    auto it = operationMap.find(node->operation_type_);
+    if (it != operationMap.end()) {
+        it->second(node);
     } else {
-        std::cerr << "kernel::computeNode error: unrecognized node operation type " << opt << std::endl;
+        std::cerr << "kernel::computeNode error: unrecognized node operation type " << node->operation_type_
+                  << std::endl;
         exit(-1);
     }
 }
@@ -65,5 +66,9 @@ void matmul(std::shared_ptr<Node> node) {
 void constant(std::shared_ptr<Node> node) {
     // pretty sure nothing needs done here
 }
+
+void tensor(std::shared_ptr<Node> node) {}
+
+void normal(std::shared_ptr<Node> node) {}
 
 }  // namespace kernel

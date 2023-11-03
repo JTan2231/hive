@@ -26,7 +26,7 @@ namespace allocation {
 // TODO: shapes need figured out to a cleaner solution
 
 // these functions allocate buffers for their given nodes
-void allocateTensorNode(std::shared_ptr<Node> node) {
+void tensorAllocate(std::shared_ptr<Node> node) {
     size_t size = 1;
     std::vector<int> shape;
     for (const std::string& arg : node->arg_order_) {
@@ -43,7 +43,7 @@ void allocateTensorNode(std::shared_ptr<Node> node) {
 // NOTE: broadcasting is currently not supported
 //       this means given inputs MUST be the same shape,
 //       save for the last two dimensions
-void allocateMatmulNode(std::shared_ptr<Node> node) {
+void matmulAllocate(std::shared_ptr<Node> node) {
     if (node->arg_order_.size() != 2) {
         std::cerr << "allocateMatmulNode error: matmul node has <> 2 args, how did this happen?" << std::endl;
         exit(-1);
@@ -90,15 +90,15 @@ void allocateMatmulNode(std::shared_ptr<Node> node) {
 }
 
 // all constants will be assumed to be 32-bit float values
-void allocateConstantNode(std::shared_ptr<Node> node) {
+void constantAllocate(std::shared_ptr<Node> node) {
     node->output_ = std::shared_ptr<Buffer>(new Buffer(1, DTYPE::float32));
 
     float value = std::stof(node->name_);
     node->output_->setIndex(0, (void*)(&value));
 }
 
-void allocateNormalNode(std::shared_ptr<Node> node) {
-    allocateTensorNode(node);
+void normalAllocate(std::shared_ptr<Node> node) {
+    tensorAllocate(node);
     std::shared_ptr<Buffer> buf = node->output_;
 
     if (buf->dtype() != DTYPE::float32) {
@@ -115,14 +115,15 @@ void allocateNormalNode(std::shared_ptr<Node> node) {
 }
 
 void allocateNode(std::shared_ptr<Node> node) {
-    if (node->operation_type_ == Operations::TENSOR) {
-        allocateTensorNode(node);
-    } else if (node->operation_type_ == Operations::MATMUL) {
-        allocateMatmulNode(node);
-    } else if (node->operation_type_ == Operations::CONSTANT) {
-        allocateConstantNode(node);
-    } else if (node->operation_type_ == Operations::NORMAL) {
-        allocateNormalNode(node);
+    const auto& allocationMap = OperationRegistry::GetAllocationMap();
+
+    auto it = allocationMap.find(node->operation_type_);
+    if (it != allocationMap.end()) {
+        it->second(node);
+    } else {
+        std::cerr << "allocation::allocateNode error: unrecognized node operation type " << node->operation_type_
+                  << std::endl;
+        exit(-1);
     }
 }
 

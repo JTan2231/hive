@@ -6,6 +6,7 @@
 # clangd lsp
 .clang-format
 .cache
+.clangd
 
 # build artifacts
 compile_commands.json

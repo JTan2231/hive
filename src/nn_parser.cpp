@@ -206,9 +206,13 @@ bool NNParser::inBounds() {
     return in;
 }
 
-bool NNParser::inBoundsNoError() { return cursor_ < content_size_; }
+bool NNParser::inBoundsNoError() {
+    return cursor_ < content_size_;
+}
 
-char NNParser::at(const std::string& contents) { return contents[cursor_]; }
+char NNParser::at(const std::string& contents) {
+    return contents[cursor_];
+}
 
 void NNParser::incrementAndAdd(const std::string& contents) {
     incrementCursor();
@@ -289,7 +293,7 @@ std::string NNParser::registerVariableDefinition(std::string variable_name, cons
                 if (isNumeric(arg_buffer)) {
                     args.push_back(arg_buffer);
                     arg_buffer = "";
-                } else if (Operations::valid(arg_buffer)) {
+                } else if (OperationRegistry::valid(arg_buffer)) {
                     // this arg is the result of an operation
                     // get the result and attach it here
                     arg_buffer = registerVariableDefinition(arg_buffer, contents, true);

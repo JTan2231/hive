@@ -19,7 +19,9 @@
 
 Node::Node(int id) : id_(id) {}
 
-int Node::getId() { return id_; }
+int Node::getId() {
+    return id_;
+}
 
 void Node::printOutput() {
     std::vector<int> indices(shape_.size(), 0);
@@ -94,6 +96,7 @@ std::string Graph::createVariable(const std::string& name, const std::string& op
     variable_map_[new_node->name_] = new_node;
 
     for (const std::string& arg : arguments) {
+        // TODO: will constant args always mean it's a tensor op?
         if (strings::isNumeric(arg)) {
             // create a Constant-type node
             // set as child
@@ -105,10 +108,7 @@ std::string Graph::createVariable(const std::string& name, const std::string& op
             new_node->children_[arg] = constant_map_[constant];
             edges_[new_node->id_].insert(constant_map_[constant]->id_);
 
-            // there's gotta be a better way to do this
-            if (operation_type == Operations::TENSOR) {
-                new_node->shape_.push_back(constant);
-            }
+            new_node->shape_.push_back(constant);
         } else if (variable_map_.find(alias_map_[arg]) != variable_map_.end()) {
             // set the pre-existing variable node as a child
             new_node->children_[arg] = variable_map_[alias_map_[arg]];
@@ -137,12 +137,14 @@ void Graph::createConstant(int constant) {
     std::shared_ptr<Node> constant_ptr = newNode();
 
     constant_ptr->name_ = std::to_string(constant);
-    constant_ptr->operation_type_ = Operations::CONSTANT;
+    constant_ptr->operation_type_ = operations::constant;
 
     constant_map_[constant] = constant_ptr;
 }
 
-bool Graph::isVariable(const std::string& name) { return variable_map_.find(alias_map_[name]) != variable_map_.end(); }
+bool Graph::isVariable(const std::string& name) {
+    return variable_map_.find(alias_map_[name]) != variable_map_.end();
+}
 
 // topological sort
 // the number of edges a node has is determined by how many of its children's subgraphs are fully evaluated
