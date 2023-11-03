@@ -5,3 +5,5 @@ let c = matmul(a, b);
 let d = normal(7, 3);
 
 let e = matmul(d, c);
+e = sigmoid(e);
+e = relu(e);

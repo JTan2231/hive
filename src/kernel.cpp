@@ -10,6 +10,9 @@
 namespace kernel {
 
 // TODO: how will broadcasting be handled?
+// TODO: figure something out with the float templates
+// TODO: parallelization
+// TODO: gpu programming
 
 void computeNode(std::shared_ptr<Node> node) {
     const auto& operationMap = OperationRegistry::GetOperationMap();
@@ -70,5 +73,45 @@ void constant(std::shared_ptr<Node> node) {
 void tensor(std::shared_ptr<Node> node) {}
 
 void normal(std::shared_ptr<Node> node) {}
+
+void sigmoid(std::shared_ptr<Node> node) {
+    size_t size = 1;
+    for (int i : node->shape_) {
+        size *= i;
+    }
+
+    std::shared_ptr<Node> input = node->children_[node->arg_order_[0]];
+    // probably bad approximation per ChatGPT lol
+    // TODO: change this, obviously
+    for (size_t i = 0; i < size; i++) {
+        float x = input->output_->getIndex<float>(i);
+        float output = 0;
+        if (x < -4) {
+            output = 0;
+        } else if (x > 4) {
+            output = 1;
+        } else {
+            float x2 = x * x;
+            output = x * (0.5 + 0.15012 * x2) / (1 + 0.20162 * x2);
+        }
+
+        node->output_->setIndex(i, (void*)(&output));
+    }
+}
+
+void relu(std::shared_ptr<Node> node) {
+    size_t size = 1;
+    for (int i : node->shape_) {
+        size *= i;
+    }
+
+    std::shared_ptr<Node> input = node->children_[node->arg_order_[0]];
+    for (size_t i = 0; i < size; i++) {
+        float x = input->output_->getIndex<float>(i);
+        float output = x > 0 ? x : 0;
+
+        node->output_->setIndex(i, (void*)(&output));
+    }
+}
 
 }  // namespace kernel

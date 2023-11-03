@@ -56,10 +56,13 @@ class OperationRegistry {
     const std::string name = _str_##name;                                                                  \
     }
 
-REGISTER_OPERATION(matmul);
 REGISTER_OPERATION(constant);
 REGISTER_OPERATION(tensor);
 REGISTER_OPERATION(normal);
 
-#endif  // OPS_H
+REGISTER_OPERATION(matmul);
 
+REGISTER_OPERATION(sigmoid);
+REGISTER_OPERATION(relu);
+
+#endif  // OPS_H
