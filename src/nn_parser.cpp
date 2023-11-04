@@ -88,7 +88,7 @@ Graph NNParser::parse(const std::string& contents) {
         }
 
         buffer_ = trim(buffer_);
-        if (buffer_ == variable_declarator) {
+        if (buffer_ == variable_declarator_) {
             incrementAndAdd(contents);  // check if this is a keyword or
                                         // just part of a variable name
             if (buffer_.back() == ' ') {
@@ -148,6 +148,71 @@ Graph NNParser::parse(const std::string& contents) {
             // definition
             registerVariableDefinition(variable_name, contents, false);
             buffer_ = "";
+        } else if (buffer_ == function_declarator_) {
+            // functions have 3 rules (for now):
+            //   1. The only variables in the scope are those input as arguments
+            //   2. There must be exactly 1 return result
+            //   3. Functions may not be declared/defined in another function definition
+
+            incrementAndAdd(contents);  // check if this is an isolated keyword or part of a function name
+            if (buffer_.back() == ' ') {
+                std::string function_name = registerFunctionName(contents);
+                incrementCursor();
+                std::cout << strings::debug("FOUND FUNCTION NAME: ") << strings::info(function_name) << std::endl;
+
+                // are we just assuming all variables are tensors ????
+                std::vector<std::string> args;
+                std::string arg_buffer = "";
+
+                // this leaves the cursor on the closing parenthesis `)`
+                while (inBoundsNoError() && at(contents) != ')') {
+                    arg_buffer += at(contents);
+                    buffer_ += at(contents);  // this probably isn't needed
+                    if (at(contents) == ',' || at(contents) == '(') {
+                        arg_buffer = strip(arg_buffer);
+
+                        if (stringIsAlphanumeric(arg_buffer)) {
+                            args.push_back(arg_buffer);
+                            arg_buffer = "";
+                        } else {
+                            std::cerr << strings::error("NNParser:parser error: ")
+                                      << "expected expression, variable, or value " << std::endl;
+
+                            showCursor(contents);
+                            exit(-1);
+                        }
+                    }
+
+                    incrementCursor();
+                }
+
+                arg_buffer = strip(arg_buffer);
+                if (arg_buffer.size() > 0) {
+                    args.push_back(arg_buffer);
+                }
+
+                std::cout << strings::debug("ARGS: ") << strings::info(strings::vecToString(args)) << std::endl;
+
+                incrementCursor();
+
+                // find end of function
+                // call parse on the substring of contents that represents that function
+                // store the resulting graph
+                // ???
+                // what about function calls?
+                //   this represents a problem with the current model of execution
+                //   because if we're interested in memory optimization
+                //   and function calls can represent a recursive program execution
+                //   then reusing the same memory allocations while wiring the function calls
+                //   to different outputs becomes unclear
+                //   ...
+                //   no it doesn't?
+                //   just call that graph with the given inputs lol
+                //   solve for the inputs then call that graph
+                //   take that output and use it in current graph
+
+                buffer_ = "";
+            }
         } else {
             incrementCursor();
         }
@@ -163,6 +228,16 @@ Graph NNParser::parse(const std::string& contents) {
 
 bool NNParser::isAlphanumeric(char c) {
     return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_';
+}
+
+bool NNParser::stringIsAlphanumeric(const std::string& s) {
+    for (char c : s) {
+        if (!isAlphanumeric(c)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 // misleading function name
@@ -212,17 +287,13 @@ bool NNParser::inBounds() {
     return in;
 }
 
-bool NNParser::inBoundsNoError() {
-    return cursor_ < content_size_;
-}
+bool NNParser::inBoundsNoError() { return cursor_ < content_size_; }
 
 void NNParser::showCursor(const std::string& contents) {
     std::cout << strings::info("cursor is at the end of: ") << contents.substr(cursor_ - 10, 11) << std::endl;
 }
 
-char NNParser::at(const std::string& contents) {
-    return contents[cursor_];
-}
+char NNParser::at(const std::string& contents) { return contents[cursor_]; }
 
 void NNParser::incrementAndAdd(const std::string& contents) {
     incrementCursor();
@@ -243,7 +314,8 @@ std::string NNParser::registerVariableName(const std::string& contents) {
 
         // variable names can't contain non-alphanumeric characters
         if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) {
-            std::cerr << "parsing error: invalid character `" << c << "` in variable name" << std::endl;
+            std::cerr << strings::error("NNParser::registerVariableName error:") << " invalid character "
+                      << strings::info("`" + std::to_string(c) + "`") << " in variable name" << std::endl;
 
             showCursor(contents);
             exit(-1);
@@ -254,12 +326,20 @@ std::string NNParser::registerVariableName(const std::string& contents) {
         incrementCursor();
     }
 
-    if (registered_variables.find(variable_name) != registered_variables.end()) {
-        std::cerr << "parsing error: variable `" << variable_name << "` already registered" << std::endl;
+    if (registered_variables_.find(variable_name) != registered_variables_.end()) {
+        std::cerr << strings::error("NNParser::registerVariableName:") << " variable "
+                  << strings::info("`" + variable_name + "`") << " already declared" << std::endl;
         exit(-1);
     }
 
-    registered_variables.insert(variable_name);
+    if (keywords.find(variable_name) != keywords.end()) {
+        std::cerr << strings::error("NNParser::registerVariableName error:")
+                  << strings::info(" `" + variable_name + "`") << " is a reserved keyword" << std::endl;
+
+        exit(-1);
+    }
+
+    registered_variables_.insert(variable_name);
 
     // cursor is left at the whitespace following the variable name
     // note the variable name MUST have whitespace between it and the = sign
@@ -296,6 +376,10 @@ std::string NNParser::registerVariableDefinition(std::string variable_name, cons
         // might change in the future
         std::string arg_buffer = "";
         // this condition could probably be better generalized
+        // TODO: why do we need the semicolons and \n?
+        //       I think it has something to do with nested arguments but this feels disgusting
+        //
+        // this loop collects the arguments for this variable definition
         while (inBoundsNoError() && at(contents) != ')' && at(contents) != ';' && at(contents) != '\n') {
             arg_buffer += at(contents);
             buffer_ += at(contents);
@@ -311,7 +395,7 @@ std::string NNParser::registerVariableDefinition(std::string variable_name, cons
                     arg_buffer = registerVariableDefinition(arg_buffer, contents, true);
                     args.push_back(arg_buffer);
                     arg_buffer = "";
-                } else if (registered_variables.find(arg_buffer) != registered_variables.end()) {
+                } else if (registered_variables_.find(arg_buffer) != registered_variables_.end()) {
                     // ???
                     // link the variable here
                     args.push_back(arg_buffer);
@@ -352,5 +436,58 @@ std::string NNParser::registerVariableDefinition(std::string variable_name, cons
 
     return variable_node_name;
 }
+
+std::string NNParser::registerFunctionName(const std::string& contents) {
+    // cursor_ is at the whitespace after the`n` of function when this
+    // function starts
+    while (inBounds() && at(contents) == ' ') {
+        incrementCursor();
+    }
+
+    // at the function name
+    std::string function_name = "";
+    while (inBounds() && !std::isspace(at(contents)) && at(contents) != '(') {
+        char c = at(contents);
+
+        // function names can't contain non-alphanumeric characters
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_')) {
+            std::cerr << strings::error("NNParser::registerFunctionName error:") << " invalid character "
+                      << strings::info("`" + (std::string() + c) + "`") << " in function name" << std::endl;
+
+            showCursor(contents);
+            exit(-1);
+        }
+
+        function_name += at(contents);
+        buffer_ += at(contents);
+        incrementCursor();
+    }
+
+    if (registered_functions_.find(function_name) != registered_functions_.end()) {
+        std::cerr << strings::error("NNParser::registerfunctionName error:") << " function "
+                  << strings::info("`" + function_name + "`") << " already declared" << std::endl;
+        exit(-1);
+    }
+
+    if (keywords.find(function_name) != keywords.end()) {
+        std::cerr << strings::error("NNParser::registerfunctionName error:")
+                  << strings::info(" `" + function_name + "`") << " is a reserved keyword" << std::endl;
+
+        exit(-1);
+    }
+
+    if (at(contents) != '(') {
+        std::cerr << strings::error("NNParser::registerFunctionName error:")
+                  << " expected ( to begin argument list for function " << strings::info(function_name) << std::endl;
+        exit(-1);
+    }
+
+    registered_functions_.insert(function_name);
+
+    // cursor is left at the `(` beginning the argument list
+    return trim(function_name);
+}
+
+std::string NNParser::registerFunctionDefinition(std::string function_name, const std::string& contents) { return ""; }
 
 }  // namespace nn_parser

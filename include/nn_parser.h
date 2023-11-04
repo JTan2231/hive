@@ -72,6 +72,8 @@ class NNParser {
    private:
     bool isAlphanumeric(char c);
 
+    bool stringIsAlphanumeric(const std::string& s);
+
     // misleading function name
     // punctuation counts as numeric here
     //
@@ -97,6 +99,10 @@ class NNParser {
 
     std::string registerVariableDefinition(std::string variable_name, const std::string& contents, bool is_arg);
 
+    std::string registerFunctionName(const std::string& contents);
+
+    std::string registerFunctionDefinition(std::string function_name, const std::string& contents);
+
     std::string buffer_;
 
     size_t content_size_;
@@ -106,9 +112,13 @@ class NNParser {
     // for debugging
     std::vector<std::string> lines_;
 
-    const std::string variable_declarator = "let";
+    const std::string variable_declarator_ = "let";
+    const std::string function_declarator_ = "function";
 
-    std::set<std::string> registered_variables;
+    const std::set<std::string> keywords = {variable_declarator_, function_declarator_};
+
+    std::set<std::string> registered_variables_;
+    std::set<std::string> registered_functions_;
 
     Graph graph;
 };

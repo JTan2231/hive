@@ -7,3 +7,4 @@ let d = normal(7, 3);
 let e = sigmoid(sigmoid(matmul(d, c)));
 e = relu(e);
 e = matmul(e, d);
+let function = normal(5, 5);

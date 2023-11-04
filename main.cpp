@@ -4,7 +4,7 @@
 using namespace std;
 
 int main() {
-    const string filepath = "./nn/another_llm.nn";
+    const string filepath = "./nn/function.nn";
     const string contents = nn_parser::readFile(filepath);
 
     nn_parser::NNParser parser(contents);
