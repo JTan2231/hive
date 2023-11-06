@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -35,6 +36,9 @@ class Node {
 
     std::vector<int> shape_;
 
+    // this is only used if operation_type_ == operations::function
+    std::shared_ptr<Graph> graph_;
+
     void printOutput();
 
    private:
@@ -63,12 +67,24 @@ class Graph {
     std::string createVariable(const std::string& name, const std::string& operation_type,
                                const std::vector<std::string>& arguments);
 
+    std::string createFunctionVariable(const std::string& name, const std::vector<std::string>& arguments,
+                                       const std::shared_ptr<Graph> graph);
+
     void createConstant(int constant);
 
     bool isVariable(const std::string& name);
 
-    // topological sort to compute the graph
     void evaluate();
+
+    void allocate();
+
+    // topological sort for evaluate and allocate
+    void topologicalSort(std::function<void(std::shared_ptr<Node>)> visit_function);
+
+    // NOTE: this will probably have to change
+    //       as it works only under the assumption
+    //       that functions/graphs return only one output
+    std::shared_ptr<Node> getHead();
 
     void listNodes();
 
@@ -80,6 +96,9 @@ class Graph {
 
     std::map<int, std::shared_ptr<Node>> constant_map_;
     std::map<std::string, std::shared_ptr<Node>> variable_map_;
+
+    std::shared_ptr<Node> _create_variable(const std::string& name, const std::string& operation_type,
+                                           const std::vector<std::string>& arguments);
 
     // this is for when a variable is reassigned
     // e.g. let A = tensor(1, 2)

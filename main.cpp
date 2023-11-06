@@ -8,7 +8,9 @@ int main() {
     const string contents = nn_parser::readFile(filepath);
 
     nn_parser::NNParser parser(contents);
-    Graph g = parser.parse(contents);
-    g.evaluate();
-    g.printNodeValues();
+    std::shared_ptr<Graph> g = parser.parse(contents);
+    g->listNodes();
+    g->allocate();
+    g->evaluate();
+    g->printNodeValues();
 }

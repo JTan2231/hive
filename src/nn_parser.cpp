@@ -50,12 +50,29 @@ NNParser::NNParser(std::string contents) : content_size_(contents.size()), curso
     lines_ = split(contents, "\n");
 }
 
+NNParser::NNParser(size_t content_size, std::vector<std::string> input_variables)
+    : content_size_(content_size), cursor_(0), line_(1), buffer_("") {
+    for (const auto& s : input_variables) {
+        registered_variables_.insert(s);
+    }
+}
+
 NNParser::~NNParser() {}
 
 // TODO: this should return a (as of yet unmade) computational graph object
 // TODO: handle variable reassignment
 // TODO: variables as arguments? how are those being handled?
-Graph NNParser::parse(const std::string& contents) {
+std::shared_ptr<Graph> NNParser::parse(const std::string& contents) {
+    std::shared_ptr<Graph> graph(new Graph());
+
+    // if we're parsing a function, register the arguments in the graph as well
+    if (registered_variables_.size() > 0) {
+        for (auto& p : registered_variables_) {
+            // NOTE: these variables are shapeless
+            graph->createVariable(p, operations::input, {});
+        }
+    }
+
     // order of operations when looking at a file
     // we are looking for
     //   - a variable decalaration
@@ -117,11 +134,11 @@ Graph NNParser::parse(const std::string& contents) {
 
                 // cursor should be left at the start of the variable
                 // definition
-                registerVariableDefinition(variable_name, contents, false);
+                registerVariableDefinition(graph, variable_name, contents, false);
 
                 buffer_ = "";
             }
-        } else if (graph.isVariable(buffer_)) {
+        } else if (graph->isVariable(buffer_)) {
             std::string variable_name = buffer_;
             // find the = sign
             while (inBounds() && at(contents) != '=') {
@@ -146,7 +163,7 @@ Graph NNParser::parse(const std::string& contents) {
 
             // cursor should be left at the start of the variable
             // definition
-            registerVariableDefinition(variable_name, contents, false);
+            registerVariableDefinition(graph, variable_name, contents, false);
             buffer_ = "";
         } else if (buffer_ == function_declarator_) {
             // functions have 3 rules (for now):
@@ -195,21 +212,39 @@ Graph NNParser::parse(const std::string& contents) {
 
                 incrementCursor();
 
-                // find end of function
-                // call parse on the substring of contents that represents that function
-                // store the resulting graph
-                // ???
-                // what about function calls?
-                //   this represents a problem with the current model of execution
-                //   because if we're interested in memory optimization
-                //   and function calls can represent a recursive program execution
-                //   then reusing the same memory allocations while wiring the function calls
-                //   to different outputs becomes unclear
-                //   ...
-                //   no it doesn't?
-                //   just call that graph with the given inputs lol
-                //   solve for the inputs then call that graph
-                //   take that output and use it in current graph
+                // functions will be subgraphs pointed to by a function node in the main graph
+                // on execution their subgraphs will be executed with the given inputs
+                //
+                // each function call is treated as its own subgraph
+                // and is allocated separately
+
+                // [function_start, function_end)
+                int function_start = cursor_;
+                int function_end = function_start;
+                while (cursor_ < contents.size() - 3) {
+                    if (contents.substr(cursor_, 3) == "end") {
+                        // check if it's not part of a variable name
+                        if (std::isspace(contents[cursor_ - 1]) &&
+                            (std::isspace(contents[cursor_ + 3]) || cursor_ == contents.size() - 4)) {
+                            function_end = cursor_;
+                            break;
+                        }
+                    }
+
+                    incrementCursor();
+                }
+
+                std::string function_definition = trim(contents.substr(function_start, function_end - function_start));
+
+                // do we have to instantiate a separate parser?
+                NNParser function_parser(function_definition.size(), args);
+                std::shared_ptr<Graph> function_graph = function_parser.parse(function_definition);
+                std::cout << strings::debug("FINISHED PARSING FUNCTION") << std::endl;
+                function_graph->listNodes();
+
+                registered_functions_[function_name] = function_graph;
+
+                cursor_ = function_end + 3;
 
                 buffer_ = "";
             }
@@ -220,7 +255,7 @@ Graph NNParser::parse(const std::string& contents) {
 
     if (DEBUG) {
         std::cout << "Finished parsing" << std::endl;
-        graph.printNodeValues();
+        graph->printNodeValues();
     }
 
     return graph;
@@ -290,7 +325,8 @@ bool NNParser::inBounds() {
 bool NNParser::inBoundsNoError() { return cursor_ < content_size_; }
 
 void NNParser::showCursor(const std::string& contents) {
-    std::cout << strings::info("cursor is at the end of: ") << contents.substr(cursor_ - 10, 11) << std::endl;
+    std::cout << strings::info("cursor is at the end of: ")
+              << contents.substr(std::max(0, (int)cursor_ - 10), std::min((int)contents.size() - 1, 11)) << std::endl;
 }
 
 char NNParser::at(const std::string& contents) { return contents[cursor_]; }
@@ -346,7 +382,8 @@ std::string NNParser::registerVariableName(const std::string& contents) {
     return trim(variable_name);
 }
 
-std::string NNParser::registerVariableDefinition(std::string variable_name, const std::string& contents, bool is_arg) {
+std::string NNParser::registerVariableDefinition(std::shared_ptr<Graph> graph, std::string variable_name,
+                                                 const std::string& contents, bool is_arg) {
     // the definition MUST start with an op
     // so we start with looking for the end of the op name,
     // which is either a `;` or `(`
@@ -355,6 +392,7 @@ std::string NNParser::registerVariableDefinition(std::string variable_name, cons
     if (is_arg) {
         op_name = variable_name;
     } else {
+        // what is this for?
         while (inBounds() && isAlphanumeric(at(contents))) {
             op_name += at(contents);
             buffer_ += at(contents);
@@ -392,7 +430,7 @@ std::string NNParser::registerVariableDefinition(std::string variable_name, cons
                 } else if (OperationRegistry::valid(arg_buffer)) {
                     // this arg is the result of an operation
                     // get the result and attach it here
-                    arg_buffer = registerVariableDefinition(arg_buffer, contents, true);
+                    arg_buffer = registerVariableDefinition(graph, arg_buffer, contents, true);
                     args.push_back(arg_buffer);
                     arg_buffer = "";
                 } else if (registered_variables_.find(arg_buffer) != registered_variables_.end()) {
@@ -428,7 +466,12 @@ std::string NNParser::registerVariableDefinition(std::string variable_name, cons
         buffer_ += at(contents);
     }
 
-    std::string variable_node_name = graph.createVariable(variable_name, op_name, args);
+    std::string variable_node_name = "";
+    if (registered_functions_.find(op_name) != registered_functions_.end()) {
+        variable_node_name = graph->createFunctionVariable(variable_name, args, registered_functions_[op_name]);
+    } else {
+        variable_node_name = graph->createVariable(variable_name, op_name, args);
+    }
 
     if (inBoundsNoError() && at(contents) == ')') {
         incrementCursor();
@@ -481,8 +524,6 @@ std::string NNParser::registerFunctionName(const std::string& contents) {
                   << " expected ( to begin argument list for function " << strings::info(function_name) << std::endl;
         exit(-1);
     }
-
-    registered_functions_.insert(function_name);
 
     // cursor is left at the `(` beginning the argument list
     return trim(function_name);

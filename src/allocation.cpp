@@ -25,6 +25,8 @@ namespace allocation {
 
 // TODO: shapes need figured out to a cleaner solution
 
+void inputAllocate(std::shared_ptr<Node> node) {}
+
 // these functions allocate buffers for their given nodes
 void tensorAllocate(std::shared_ptr<Node> node) {
     size_t size = 1;
@@ -45,7 +47,8 @@ void tensorAllocate(std::shared_ptr<Node> node) {
 //       save for the last two dimensions
 void matmulAllocate(std::shared_ptr<Node> node) {
     if (node->arg_order_.size() != 2) {
-        std::cerr << "allocateMatmulNode error: matmul node has <> 2 args, how did this happen?" << std::endl;
+        std::cerr << strings::error("matmulAllocateError: ") << "matmul node has <> 2 args, how did this happen?"
+                  << std::endl;
         exit(-1);
     }
 
@@ -56,16 +59,17 @@ void matmulAllocate(std::shared_ptr<Node> node) {
     shape_b = node->children_[node->arg_order_[1]]->shape_;
 
     if (shape_a.size() != shape_b.size()) {
-        std::cerr << "allocateMatmulNode error: argument shapes must be equal in size. Got "
-                  << strings::vecToString(shape_a) << " and " << strings::vecToString(shape_b) << std::endl;
+        std::cerr << strings::error("allocation::matmulAllocateError: ")
+                  << "argument shapes must be equal in size. Got " << strings::vecToString(shape_a) << " and "
+                  << strings::vecToString(shape_b) << std::endl;
         exit(-1);
     }
 
     int n = shape_a.size();
     for (int i = 0; i < n - 2; i++) {
         if (shape_a[i] != shape_b[i]) {
-            std::cerr << "allocateMatmulNode error: shapes must be equal until the final two dimensions [N - 2, N - 1]"
-                      << std::endl;
+            std::cerr << strings::error("allocation::matmulAllocateError: ")
+                      << "shapes must be equal until the final two dimensions [N - 2, N - 1]" << std::endl;
             exit(-1);
         }
 
@@ -78,7 +82,7 @@ void matmulAllocate(std::shared_ptr<Node> node) {
     new_shape[n - 1] = shape_b[n - 1];
 
     if (shape_a[n - 1] != shape_b[n - 2]) {
-        std::cerr << "allocatedMatmulNode error: incompatible shapes for matrix multiplication. Got "
+        std::cerr << "allocation::allocateMatmulNode error: incompatible shapes for matrix multiplication. Got "
                   << strings::vecToString(shape_a) << " and " << strings::vecToString(shape_b) << std::endl;
         exit(-1);
     }
@@ -88,6 +92,8 @@ void matmulAllocate(std::shared_ptr<Node> node) {
     node->output_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
     node->shape_ = new_shape;
 }
+
+void functionAllocate(std::shared_ptr<Node> node) { node->graph_->allocate(); }
 
 // all constants will be assumed to be 32-bit float values
 void constantAllocate(std::shared_ptr<Node> node) {
@@ -102,7 +108,8 @@ void normalAllocate(std::shared_ptr<Node> node) {
     std::shared_ptr<Buffer> buf = node->output_;
 
     if (buf->dtype() != DTYPE::float32) {
-        std::cerr << "allocation::allocateNormalNode error: buffer data type must be float32" << std::endl;
+        std::cerr << strings::error("allocation::allocateNormalNode error: ") << "buffer data type must be float32"
+                  << std::endl;
         exit(-1);
     }
 
@@ -125,9 +132,7 @@ void sigmoidAllocate(std::shared_ptr<Node> node) {
     node->shape_ = shape;
 }
 
-void reluAllocate(std::shared_ptr<Node> node) {
-    sigmoidAllocate(node);
-}
+void reluAllocate(std::shared_ptr<Node> node) { sigmoidAllocate(node); }
 
 void allocateNode(std::shared_ptr<Node> node) {
     const auto& allocationMap = OperationRegistry::GetAllocationMap();
@@ -136,8 +141,8 @@ void allocateNode(std::shared_ptr<Node> node) {
     if (it != allocationMap.end()) {
         it->second(node);
     } else {
-        std::cerr << "allocation::allocateNode error: unrecognized node operation type " << node->operation_type_
-                  << std::endl;
+        std::cerr << strings::error("allocation::allocateNode error: ") << "unrecognized node operation type "
+                  << strings::info("`" + node->operation_type_ + "`") << std::endl;
         exit(-1);
     }
 }

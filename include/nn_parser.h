@@ -61,13 +61,14 @@ class NNParser {
    public:
     NNParser(size_t content_size);
     NNParser(std::string contents);
+    NNParser(size_t content_size, std::vector<std::string> input_arguments);
 
     ~NNParser();
 
     // TODO: this should return a (as of yet unmade) computational graph object
     // TODO: handle variable reassignment
     // TODO: variables as arguments? how are those being handled?
-    Graph parse(const std::string& contents);
+    std::shared_ptr<Graph> parse(const std::string& contents);
 
    private:
     bool isAlphanumeric(char c);
@@ -97,7 +98,8 @@ class NNParser {
 
     std::string registerVariableName(const std::string& contents);
 
-    std::string registerVariableDefinition(std::string variable_name, const std::string& contents, bool is_arg);
+    std::string registerVariableDefinition(std::shared_ptr<Graph> graph, std::string variable_name,
+                                           const std::string& contents, bool is_arg);
 
     std::string registerFunctionName(const std::string& contents);
 
@@ -118,9 +120,7 @@ class NNParser {
     const std::set<std::string> keywords = {variable_declarator_, function_declarator_};
 
     std::set<std::string> registered_variables_;
-    std::set<std::string> registered_functions_;
-
-    Graph graph;
+    std::map<std::string, std::shared_ptr<Graph>> registered_functions_;
 };
 
 }  // namespace nn_parser

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -20,9 +21,7 @@
 
 Node::Node(int id) : id_(id) {}
 
-int Node::getId() {
-    return id_;
-}
+int Node::getId() { return id_; }
 
 std::string _node_format(float x) {
     constexpr int precision = 6;
@@ -87,16 +86,8 @@ void Graph::newEdge(int from, int to) {
     edges_[from].insert(to);
 }
 
-// variables must spawn from an operation
-// there is no declaration operation
-// e.g.
-//      let A = tensor(256, 512); // this is allowed
-//      let B;                    // this is not allowed
-//
-// NOTE: edges_ isn't being updated here
-//       is it needed as a field?
-std::string Graph::createVariable(const std::string& name, const std::string& operation_type,
-                                  const std::vector<std::string>& arguments) {
+std::shared_ptr<Node> Graph::_create_variable(const std::string& name, const std::string& operation_type,
+                                              const std::vector<std::string>& arguments) {
     std::shared_ptr<Node> new_node = newNode();
 
     new_node->name_ = name;
@@ -111,6 +102,7 @@ std::string Graph::createVariable(const std::string& name, const std::string& op
 
     for (const std::string& arg : arguments) {
         // TODO: will constant args always mean it's a tensor op?
+        // TODO: this alias map nonsense is a headache
         if (strings::isNumeric(arg)) {
             // create a Constant-type node
             // set as child
@@ -132,7 +124,9 @@ std::string Graph::createVariable(const std::string& name, const std::string& op
             new_node->children_[arg] = variable_map_[arg];
             edges_[new_node->id_].insert(variable_map_[arg]->id_);
         } else {
-            std::cerr << "Graph::createVariable error: argument is neither numeric constant nor existing variable"
+            std::cerr << strings::error("Graph::createVariable error: ")
+                      << "argument " + strings::info("`" + arg + "`") +
+                             " is neither numeric constant nor existing variable"
                       << std::endl;
 
             exit(-1);
@@ -141,7 +135,34 @@ std::string Graph::createVariable(const std::string& name, const std::string& op
 
     alias_map_[name] = new_node->name_;
 
-    allocation::allocateNode(new_node);
+    return new_node;
+}
+
+// variables must spawn from an operation
+// there is no declaration operation
+// e.g.
+//      let A = tensor(256, 512); // this is allowed
+//      let B;                    // this is not allowed
+//
+// NOTE: edges_ isn't being updated here
+//       is it needed as a field?
+std::string Graph::createVariable(const std::string& name, const std::string& operation_type,
+                                  const std::vector<std::string>& arguments) {
+    std::shared_ptr<Node> new_node = _create_variable(name, operation_type, arguments);
+
+    return new_node->name_;
+}
+
+std::string Graph::createFunctionVariable(const std::string& name, const std::vector<std::string>& arguments,
+                                          const std::shared_ptr<Graph> graph) {
+    std::shared_ptr<Node> new_node = _create_variable(name, operations::function, arguments);
+    new_node->graph_ = graph;
+
+    std::shared_ptr<Node> head = graph->getHead();
+    new_node->output_ = head->output_;
+    new_node->shape_ = head->shape_;
+
+    std::cout << strings::debug(head->name_) << ", " << strings::debug(strings::vecToString(head->shape_)) << std::endl;
 
     return new_node->name_;
 }
@@ -160,15 +181,17 @@ void Graph::createConstant(int constant) {
     constant_map_[constant] = constant_ptr;
 }
 
-bool Graph::isVariable(const std::string& name) {
-    return variable_map_.find(alias_map_[name]) != variable_map_.end();
-}
+bool Graph::isVariable(const std::string& name) { return variable_map_.find(alias_map_[name]) != variable_map_.end(); }
+
+void Graph::evaluate() { topologicalSort(kernel::computeNode); }
+
+void Graph::allocate() { topologicalSort(allocation::allocateNode); }
 
 // topological sort
 // the number of edges a node has is determined by how many of its children's subgraphs are fully evaluated
 // e.g. if a connected node has a fully calculated value, its edge is not taken into consideration
 //      for topological sort
-void Graph::evaluate() {
+void Graph::topologicalSort(std::function<void(std::shared_ptr<Node>)> visit_function) {
     std::map<std::string, int> degrees;
     std::queue<std::shared_ptr<Node>> q;
 
@@ -192,7 +215,7 @@ void Graph::evaluate() {
         current = q.front();
         q.pop();
 
-        kernel::computeNode(current);
+        visit_function(current);
 
         for (const auto& dependent : dependency_map[current->name_]) {
             degrees[dependent]--;
@@ -204,6 +227,45 @@ void Graph::evaluate() {
             }
         }
     }
+}
+
+// essentially a rpeeat of the above
+std::shared_ptr<Node> Graph::getHead() {
+    std::map<std::string, int> degrees;
+    std::queue<std::shared_ptr<Node>> q;
+
+    std::map<std::string, std::set<std::string>> dependency_map;
+
+    for (const auto& p : nodes_) {
+        degrees[p.second->name_] = p.second->children_.size();
+        if (p.second->children_.empty()) {
+            q.push(p.second);
+        }
+
+        // have to invert the graph
+        // for a bottom-up evaluation
+        for (auto& cp : p.second->children_) {
+            dependency_map[cp.first].insert(p.second->name_);
+        }
+    }
+
+    std::shared_ptr<Node> current;
+    while (!q.empty()) {
+        current = q.front();
+        q.pop();
+
+        for (const auto& dependent : dependency_map[current->name_]) {
+            degrees[dependent]--;
+
+            if (degrees[dependent] == 0) {
+                // constants have no incoming edges
+                // so this will *always* be a variable
+                q.push(variable_map_[dependent]);
+            }
+        }
+    }
+
+    return current;
 }
 
 void Graph::listNodes() {

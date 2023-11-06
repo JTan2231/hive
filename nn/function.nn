@@ -1,6 +1,10 @@
-function this_is_my_function(a, b, c)
-    let d = matmul(a, b);
-    let e = matmul(c, d);
-
-    return e;
+function my_function(a, b, c)
+    let d = matmul(a, b)
+    let e = matmul(c, d)
 end
+
+let a = normal(3, 5)
+let b = normal(5, 3)
+let c = normal(3, 3)
+
+let d = my_function(a, b, c)

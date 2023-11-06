@@ -31,9 +31,7 @@ class OperationRegistry {
         }
     };
 
-    static bool valid(const std::string& value) {
-        return GetOperationMap().find(value) != GetOperationMap().end();
-    }
+    static bool valid(const std::string& value) { return GetOperationMap().find(value) != GetOperationMap().end(); }
 };
 
 // two things are required for an operation registration:
@@ -56,11 +54,13 @@ class OperationRegistry {
     const std::string name = _str_##name;                                                                  \
     }
 
+REGISTER_OPERATION(input);
 REGISTER_OPERATION(constant);
 REGISTER_OPERATION(tensor);
 REGISTER_OPERATION(normal);
 
 REGISTER_OPERATION(matmul);
+REGISTER_OPERATION(function);
 
 REGISTER_OPERATION(sigmoid);
 REGISTER_OPERATION(relu);
