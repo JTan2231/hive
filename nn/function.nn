@@ -6,5 +6,11 @@ end
 let a = normal(3, 5)
 let b = normal(5, 3)
 let c = normal(3, 3)
+let d = normal(3, 3)
+let e = normal(3, 3)
+let f = normal(3, 3)
 
-let d = my_function(a, b, c)
+let g = my_function(a, b, c)
+let h = my_function(d, e, f)
+let i = my_function(g, h, f)
+let j = my_function(g, h, i)

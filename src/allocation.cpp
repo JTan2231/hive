@@ -93,7 +93,31 @@ void matmulAllocate(std::shared_ptr<Node> node) {
     node->shape_ = new_shape;
 }
 
-void functionAllocate(std::shared_ptr<Node> node) { node->graph_->allocate(); }
+void functionAllocate(std::shared_ptr<Node> node) {
+    node->graph_->allocate();
+    std::shared_ptr<Node> head = node->graph_->getHead();
+    node->shape_ = head->shape_;
+    node->output_ = head->output_;
+
+    // connect argument nodes to input nodes in function graph
+    std::vector<std::shared_ptr<Node>> inputs = node->graph_->getInputs();
+    std::sort(inputs.begin(), inputs.end(),
+              [](const std::shared_ptr<Node> a, const std::shared_ptr<Node> b) { return a->getId() < b->getId(); });
+
+    if (inputs.size() != node->arg_order_.size()) {
+        std::cerr << strings::error("kernel::functionAllocate error: ")
+                  << "input.size() and arg_order_.size() -- how did this happen?" << std::endl;
+
+        exit(-1);
+    }
+
+    for (int i = 0; i < inputs.size(); i++) {
+        inputs[i]->output_ = node->children_[node->arg_order_[i]]->output_;
+        inputs[i]->shape_ = node->children_[node->arg_order_[i]]->shape_;
+    }
+
+    node->graph_->print();
+}
 
 // all constants will be assumed to be 32-bit float values
 void constantAllocate(std::shared_ptr<Node> node) {

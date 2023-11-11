@@ -73,14 +73,7 @@ void function(std::shared_ptr<Node> node) {
     node->graph_->evaluate();
 }
 
-void input(std::shared_ptr<Node> node) {
-    // dummy node connecting the previous buffer to the next
-    // only one child
-    std::shared_ptr<Node> child = node->children_[node->arg_order_[0]];
-
-    node->output_ = child->output_;
-    node->shape_ = child->shape_;
-}
+void input(std::shared_ptr<Node> node) {}
 
 void constant(std::shared_ptr<Node> node) {
     // pretty sure nothing needs done here

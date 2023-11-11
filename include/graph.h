@@ -24,6 +24,8 @@ class Node {
    public:
     Node(int id);
 
+    Node(std::shared_ptr<Node> node);
+
     int getId();
 
     std::string operation_type_;
@@ -41,6 +43,8 @@ class Node {
 
     void printOutput();
 
+    void printNode();
+
    private:
     int id_;
 
@@ -50,6 +54,8 @@ class Node {
 class Graph {
    public:
     Graph();
+
+    Graph(std::shared_ptr<Graph> graph);
 
     std::shared_ptr<Node> newNode();
 
@@ -74,9 +80,17 @@ class Graph {
 
     bool isVariable(const std::string& name);
 
+    bool isNode(int id);
+
+    std::shared_ptr<Node> getNode(int id);
+
+    std::vector<std::shared_ptr<Node>> getInputs();
+
     void evaluate();
 
     void allocate();
+
+    void print();
 
     // topological sort for evaluate and allocate
     void topologicalSort(std::function<void(std::shared_ptr<Node>)> visit_function);
@@ -91,7 +105,9 @@ class Graph {
     void printNodeValues();
 
    private:
-    std::map<int, std::set<int>> edges_;          // id -> { neighbor_ids... } outgoing edges
+    // this isn't really used, do we need it?
+    std::map<int, std::set<int>> edges_;  // id -> { neighbor_ids... } outgoing edges
+
     std::map<int, std::shared_ptr<Node>> nodes_;  // id -> Node*
 
     std::map<int, std::shared_ptr<Node>> constant_map_;

@@ -23,6 +23,8 @@ class Buffer {
 
     void* getData();
 
+    void print();
+
     // this assumes the entirety of data_ is a 1-D array
     // for N-D arrays you'll need to convert
     // e.g. 4-D array of shape [x, y, z, w] at [i, j, k, l] means index == i * y * z * w + j * z * w + k * w + l

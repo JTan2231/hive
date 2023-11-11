@@ -21,6 +21,13 @@
 
 Node::Node(int id) : id_(id) {}
 
+Node::Node(std::shared_ptr<Node> node)
+    : id_(node->id_),
+      operation_type_(node->operation_type_),
+      name_(node->name_),
+      arg_order_(node->arg_order_),
+      shape_(node->shape_) {}
+
 int Node::getId() { return id_; }
 
 std::string _node_format(float x) {
@@ -60,7 +67,38 @@ void Node::printOutput() {
     std::cout << strings::debug(_node_format(output_->getIndex<float>(calculateIndex(end, shape_)))) << std::endl;
 }
 
+void Node::printNode() {
+    std::cout << strings::debug("Node " + std::to_string(id_) + ":") << std::endl;
+    std::cout << strings::debug("- Name: ") << strings::info(name_) << std::endl;
+    std::cout << strings::debug("- Shape: ") << strings::info(strings::vecToString(shape_)) << std::endl;
+    std::cout << strings::debug("- Children: ") << std::endl;
+    for (auto& [name, child] : children_) {
+        std::cout << strings::debug("  - ") << strings::info(name) << std::endl;
+    }
+}
+
 Graph::Graph() {}
+
+Graph::Graph(std::shared_ptr<Graph> graph) {
+    for (auto& [id, node] : graph->nodes_) {
+        nodes_[id] = std::shared_ptr<Node>(new Node(node));
+    }
+
+    // copy children_ pointers
+    for (auto& [id, node] : graph->nodes_) {
+        std::shared_ptr<Node> copy_node = nodes_[id];
+        for (auto& [name, child] : node->children_) {
+            copy_node->children_[name] = nodes_[child->getId()];
+        }
+    }
+
+    // copying over variable_map_
+    for (auto& [name, node] : graph->variable_map_) {
+        variable_map_[name] = nodes_[node->getId()];
+    }
+
+    alias_map_ = graph->alias_map_;
+}
 
 std::shared_ptr<Node> Graph::newNode() {
     std::shared_ptr<Node> node(new Node(node_index_));
@@ -153,16 +191,62 @@ std::string Graph::createVariable(const std::string& name, const std::string& op
     return new_node->name_;
 }
 
+bool Graph::isNode(int id) { return nodes_.find(id) != nodes_.end(); }
+
+std::shared_ptr<Node> Graph::getNode(int id) {
+    if (!isNode(id)) {
+        std::cerr << strings::error("Graoh::getNode error: ") << "node with id " << id << " does not exist"
+                  << std::endl;
+
+        exit(-1);
+    }
+
+    return nodes_.find(id)->second;
+}
+
+std::vector<std::shared_ptr<Node>> Graph::getInputs() {
+    std::vector<std::shared_ptr<Node>> inputs;
+    for (auto& [id, node] : nodes_) {
+        if (node->operation_type_ == operations::input) {
+            inputs.push_back(node);
+        }
+    }
+
+    return inputs;
+}
+
 std::string Graph::createFunctionVariable(const std::string& name, const std::vector<std::string>& arguments,
                                           const std::shared_ptr<Graph> graph) {
     std::shared_ptr<Node> new_node = _create_variable(name, operations::function, arguments);
-    new_node->graph_ = graph;
+    std::shared_ptr<Graph> graph_copy(new Graph(graph));
+    new_node->graph_ = graph_copy;
 
-    std::shared_ptr<Node> head = graph->getHead();
+    std::shared_ptr<Node> head = new_node->graph_->getHead();
     new_node->output_ = head->output_;
     new_node->shape_ = head->shape_;
 
-    std::cout << strings::debug(head->name_) << ", " << strings::debug(strings::vecToString(head->shape_)) << std::endl;
+    std::vector<std::shared_ptr<Node>> inputs;
+    int _id = 0;
+    while (graph_copy->isNode(_id) && graph_copy->getNode(_id)->operation_type_ == operations::input) {
+        inputs.push_back(graph_copy->getNode(_id));
+        _id++;
+    }
+
+    if (arguments.size() != inputs.size()) {
+        std::cerr << strings::error("Graph::createFunctionVariable error: ") << "expected "
+                  << strings::info("arguments.size() == inputs.size()") << ", got "
+                  << strings::info(std::to_string(arguments.size())) << " and "
+                  << strings::info(std::to_string(inputs.size())) << std::endl;
+        exit(-1);
+    }
+
+    // arguments *should* retain their order
+    for (int i = 0; i < inputs.size(); i++) {
+        inputs[i]->shape_ = variable_map_[alias_map_[arguments[i]]]->shape_;
+    }
+
+    std::cout << strings::debug("GRAPH COPY CHECK") << std::endl;
+    new_node->graph_->print();
 
     return new_node->name_;
 }
@@ -186,6 +270,10 @@ bool Graph::isVariable(const std::string& name) { return variable_map_.find(alia
 void Graph::evaluate() { topologicalSort(kernel::computeNode); }
 
 void Graph::allocate() { topologicalSort(allocation::allocateNode); }
+
+void _print_node(std::shared_ptr<Node> node) { node->printNode(); }
+
+void Graph::print() { topologicalSort(_print_node); }
 
 // topological sort
 // the number of edges a node has is determined by how many of its children's subgraphs are fully evaluated

@@ -6,6 +6,7 @@
 #include <iostream>
 
 #include "dtypes.h"
+#include "string_utils.h"
 
 Buffer::Buffer(size_t size, DTYPE dtype) : size_(size), dtype_(dtype) {
     data_ = malloc(size * dtypes::dtypeSize(dtype));
@@ -16,6 +17,11 @@ size_t Buffer::size() { return size_; }
 DTYPE Buffer::dtype() { return dtype_; }
 
 void* Buffer::getData() { return data_; }
+
+void Buffer::print() {
+    std::cout << strings::debug("Buffer:") << std::endl;
+    std::cout << strings::debug("- Size: ") << size_ << std::endl;
+}
 
 // this assumes the entirety of data_ is a 1-D array
 // for N-D arrays you'll need to convert
