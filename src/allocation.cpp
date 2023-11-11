@@ -76,6 +76,12 @@ void matmulAllocate(std::shared_ptr<Node> node) {
         size *= shape_a[i];
     }
 
+    if (shape_a.size() < 2 || shape_b.size() < 2) {
+        std::cerr << strings::error("allocation::matmulAllocateError: ")
+                  << "matmul shapes mst be at least 2 dimensions in shape" << std::endl;
+        exit(-1);
+    }
+
     std::vector<int> new_shape = shape_a;
 
     new_shape[n - 2] = shape_a[n - 2];
