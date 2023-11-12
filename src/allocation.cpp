@@ -21,9 +21,19 @@ void printVec(const std::string& name, std::vector<T> v) {
     }
 }
 
+// is this also where validation will be taking place?
 namespace allocation {
 
 // TODO: shapes need figured out to a cleaner solution
+// TODO: input argument count validation
+
+void _input_validator(size_t expected, size_t received, const std::string& operation) {
+    if (expected != received) {
+        std::cerr << strings::error("allocation::" + operation + " error: ") << strings::info(operation) << " expects "
+                  << expected << " operands, received " << received << std::endl;
+        exit(-1);
+    }
+}
 
 void inputAllocate(std::shared_ptr<Node> node) {
     if (!node->input_mapping_) {
@@ -49,6 +59,51 @@ void tensorAllocate(std::shared_ptr<Node> node) {
 
     node->output_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
     node->shape_ = shape;
+}
+
+// shape validators are called before this function happens
+//
+// this function is for allocating binary nodes that don't change shape as a result of their operation
+// e.g. pemdas, pow, etc.
+void _element_wise_allocate(std::shared_ptr<Node> node) {
+    node->output_ =
+        std::shared_ptr<Buffer>(new Buffer(node->children_[node->arg_order_[0]]->output_->size(), DTYPE::float32));
+    node->shape_ = node->children_[node->arg_order_[0]]->shape_;
+}
+
+void addAllocate(std::shared_ptr<Node> node) {
+    _input_validator(2, node->children_.size(), "add");
+    _element_wise_allocate(node);
+}
+
+void subtractAllocate(std::shared_ptr<Node> node) {
+    _input_validator(2, node->children_.size(), "subtract");
+    _element_wise_allocate(node);
+}
+
+void multiplyAllocate(std::shared_ptr<Node> node) {
+    _input_validator(2, node->children_.size(), "multiply");
+    _element_wise_allocate(node);
+}
+
+void divideAllocate(std::shared_ptr<Node> node) {
+    _input_validator(2, node->children_.size(), "divide");
+    _element_wise_allocate(node);
+}
+
+void sqrtAllocate(std::shared_ptr<Node> node) {
+    _input_validator(1, node->children_.size(), "sqrt");
+    _element_wise_allocate(node);
+}
+
+void expAllocate(std::shared_ptr<Node> node) {
+    _input_validator(1, node->children_.size(), "exp");
+    _element_wise_allocate(node);
+}
+
+void powAllocate(std::shared_ptr<Node> node) {
+    _input_validator(2, node->children_.size(), "pow");
+    _element_wise_allocate(node);
 }
 
 // NOTE: broadcasting is currently not supported
@@ -87,7 +142,7 @@ void matmulAllocate(std::shared_ptr<Node> node) {
 
     if (shape_a.size() < 2 || shape_b.size() < 2) {
         std::cerr << strings::error("allocation::matmulAllocateError: ")
-                  << "matmul shapes mst be at least 2 dimensions in shape" << std::endl;
+                  << "matmul shapes must be at least 2 dimensions in shape" << std::endl;
         exit(-1);
     }
 
@@ -150,6 +205,7 @@ void normalAllocate(std::shared_ptr<Node> node) {
         exit(-1);
     }
 
+    // is a separate data buffer really necessary?
     std::vector<float> data(buf->size());
     generation::fillNormal(data);
 
@@ -158,7 +214,21 @@ void normalAllocate(std::shared_ptr<Node> node) {
     }
 }
 
+void onesAllocate(std::shared_ptr<Node> node) {
+    tensorAllocate(node);
+    const float one = 1;
+    for (size_t i = 0; i < node->output_->size(); i++) {
+        node->output_->setIndex(i, (void*)(&one));
+    }
+}
+
 void sigmoidAllocate(std::shared_ptr<Node> node) {
+    if (node->children_.size() != 1) {
+        std::cerr << strings::error("allocation::sigmoidAllocate error: ") << strings::info("sigmoid ")
+                  << "operation takes only one argument, got " << node->children_.size() << std::endl;
+        exit(-1);
+    }
+
     size_t size = 1;
     std::vector<int> shape = node->children_[node->arg_order_[0]]->shape_;
     for (int i : shape) {
@@ -169,7 +239,9 @@ void sigmoidAllocate(std::shared_ptr<Node> node) {
     node->shape_ = shape;
 }
 
-void reluAllocate(std::shared_ptr<Node> node) { sigmoidAllocate(node); }
+void reluAllocate(std::shared_ptr<Node> node) {
+    sigmoidAllocate(node);
+}
 
 void allocateNode(std::shared_ptr<Node> node) {
     const auto& allocationMap = OperationRegistry::GetAllocationMap();

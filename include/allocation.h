@@ -13,6 +13,8 @@ namespace allocation {
 
 // TODO: shapes need figured out to a cleaner solution
 
+void _input_validator(size_t expected, size_t received, const std::string& operation);
+
 void inputAllocate(std::shared_ptr<Node> node);
 
 // these functions allocate buffers for their given nodes

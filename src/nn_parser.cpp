@@ -45,7 +45,8 @@ std::string readFile(const std::string& filepath) {
 
 // takes as input a .nn file
 // and spits out a computational graph for computing it
-NNParser::NNParser(size_t content_size) : content_size_(content_size), cursor_(0), line_(1), buffer_("") {}
+NNParser::NNParser(size_t content_size) : content_size_(content_size), cursor_(0), line_(1), buffer_("") {
+}
 NNParser::NNParser(std::string contents) : content_size_(contents.size()), cursor_(0), line_(1), buffer_("") {
     lines_ = split(contents, "\n");
 }
@@ -57,7 +58,8 @@ NNParser::NNParser(size_t content_size, std::vector<std::string> input_variables
     }
 }
 
-NNParser::~NNParser() {}
+NNParser::~NNParser() {
+}
 
 // TODO: this should return a (as of yet unmade) computational graph object
 // TODO: handle variable reassignment
@@ -317,14 +319,18 @@ bool NNParser::inBounds() {
     return in;
 }
 
-bool NNParser::inBoundsNoError() { return cursor_ < content_size_; }
+bool NNParser::inBoundsNoError() {
+    return cursor_ < content_size_;
+}
 
 void NNParser::showCursor(const std::string& contents) {
     std::cout << strings::info("cursor is at the end of: ")
               << contents.substr(std::max(0, (int)cursor_ - 10), std::min((int)contents.size() - 1, 11)) << std::endl;
 }
 
-char NNParser::at(const std::string& contents) { return contents[cursor_]; }
+char NNParser::at(const std::string& contents) {
+    return contents[cursor_];
+}
 
 void NNParser::incrementAndAdd(const std::string& contents) {
     incrementCursor();
@@ -344,7 +350,7 @@ std::string NNParser::registerVariableName(const std::string& contents) {
         char c = at(contents);
 
         // variable names can't contain non-alphanumeric characters
-        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) {
+        if (!isAlphanumeric(c)) {
             std::cerr << strings::error("NNParser::registerVariableName error:") << " invalid character "
                       << strings::info("`" + std::to_string(c) + "`") << " in variable name" << std::endl;
 
@@ -525,6 +531,8 @@ std::string NNParser::registerFunctionName(const std::string& contents) {
     return trim(function_name);
 }
 
-std::string NNParser::registerFunctionDefinition(std::string function_name, const std::string& contents) { return ""; }
+std::string NNParser::registerFunctionDefinition(std::string function_name, const std::string& contents) {
+    return "";
+}
 
 }  // namespace nn_parser

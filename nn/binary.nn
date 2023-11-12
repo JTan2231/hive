@@ -1,0 +1,11 @@
+let a = ones(5, 5)
+let b = ones(5, 5)
+
+let c = add(a, b)
+let add_test = add(normal(5, 5), c)
+let subtract_test = subtract(add_test, a)
+let pow_test = pow(c, add_test)
+let sqrt_test = sqrt(pow_test)
+let exp_test = exp(sqrt_test)
+let divide_test = divide(sqrt_test, exp_test)
+let multiply_test = multiply(exp_test, pow_test)

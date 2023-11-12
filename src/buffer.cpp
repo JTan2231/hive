@@ -13,15 +13,27 @@ Buffer::Buffer(size_t size, DTYPE dtype) : size_(size), dtype_(dtype) {
     memset(data_, 0, size * dtypes::dtypeSize(dtype));
 }
 
-size_t Buffer::size() { return size_; }
-DTYPE Buffer::dtype() { return dtype_; }
+size_t Buffer::size() {
+    return size_;
+}
+DTYPE Buffer::dtype() {
+    return dtype_;
+}
 
-void* Buffer::getData() { return data_; }
+void* Buffer::getData() {
+    return data_;
+}
 
 void Buffer::print() {
     std::cout << strings::debug("Buffer:") << std::endl;
     std::cout << strings::debug("- Size: ") << size_ << std::endl;
 }
+
+// TODO:
+// these index functions need a second look
+// as does the void *
+//
+// like... really?
 
 // this assumes the entirety of data_ is a 1-D array
 // for N-D arrays you'll need to convert

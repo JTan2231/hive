@@ -4,7 +4,7 @@
 using namespace std;
 
 int main() {
-    const string filepath = "./nn/function.nn";
+    const string filepath = "./nn/binary.nn";
     const string contents = nn_parser::readFile(filepath);
 
     nn_parser::NNParser parser(contents);

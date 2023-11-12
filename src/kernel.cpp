@@ -6,6 +6,7 @@
 #include "buffer.h"
 #include "graph.h"
 #include "ops.h"
+#include "string_utils.h"
 
 namespace kernel {
 
@@ -13,6 +14,7 @@ namespace kernel {
 // TODO: figure something out with the float templates
 // TODO: parallelization
 // TODO: gpu programming
+// TODO: is there anything we can do to manage precision? is that even an issue?
 
 void computeNode(std::shared_ptr<Node> node) {
     const auto& operationMap = OperationRegistry::GetOperationMap();
@@ -24,6 +26,22 @@ void computeNode(std::shared_ptr<Node> node) {
         std::cerr << "kernel::computeNode error: unrecognized node operation type " << node->operation_type_
                   << std::endl;
         exit(-1);
+    }
+}
+
+void _element_wise(
+    std::function<void(std::shared_ptr<Buffer>, std::shared_ptr<Buffer>, std::shared_ptr<Buffer>, size_t)>
+        element_function,
+    std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out) {
+    for (size_t i = 0; i < out->size(); i++) {
+        element_function(a, b, out, i);
+    }
+}
+
+void _element_wise(std::function<void(std::shared_ptr<Buffer>, std::shared_ptr<Buffer>, size_t)> element_function,
+                   std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out) {
+    for (size_t i = 0; i < out->size(); i++) {
+        element_function(a, out, i);
     }
 }
 
@@ -41,6 +59,7 @@ void matmul(std::shared_ptr<Node> node) {
     std::vector<int> out_index(l, 0);
 
     // TODO: shapes beyond 2-D
+    //       i.e. broadcasting rules
 
     for (int i = 0; i < left_node->shape_[l - 2]; i++) {
         for (int j = 0; j < right_node->shape_[r - 1]; j++) {
@@ -67,21 +86,97 @@ void matmul(std::shared_ptr<Node> node) {
 }
 
 void function(std::shared_ptr<Node> node) {
-    // TODO
-    // evaluate graph
-    // take graph output
     node->graph_->evaluate();
 }
 
-void input(std::shared_ptr<Node> node) {}
-
-void constant(std::shared_ptr<Node> node) {
-    // pretty sure nothing needs done here
+void input(std::shared_ptr<Node> node) {
 }
 
-void tensor(std::shared_ptr<Node> node) {}
+void constant(std::shared_ptr<Node> node) {
+}
 
-void normal(std::shared_ptr<Node> node) {}
+void tensor(std::shared_ptr<Node> node) {
+}
+
+void normal(std::shared_ptr<Node> node) {
+}
+
+void ones(std::shared_ptr<Node> node) {
+}
+
+void add(std::shared_ptr<Node> node) {
+    _element_wise(
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out, size_t index) {
+            float output = a->getIndex<float>(index) + b->getIndex<float>(index);
+            out->setIndex(index, (void*)(&output));
+        },
+        node->children_[node->arg_order_[0]]->output_, node->children_[node->arg_order_[1]]->output_, node->output_);
+}
+
+void subtract(std::shared_ptr<Node> node) {
+    _element_wise(
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out, size_t index) {
+            float output = a->getIndex<float>(index) - b->getIndex<float>(index);
+            out->setIndex(index, (void*)(&output));
+        },
+        node->children_[node->arg_order_[0]]->output_, node->children_[node->arg_order_[1]]->output_, node->output_);
+}
+
+void multiply(std::shared_ptr<Node> node) {
+    _element_wise(
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out, size_t index) {
+            float output = a->getIndex<float>(index) * b->getIndex<float>(index);
+            out->setIndex(index, (void*)(&output));
+        },
+        node->children_[node->arg_order_[0]]->output_, node->children_[node->arg_order_[1]]->output_, node->output_);
+}
+
+void divide(std::shared_ptr<Node> node) {
+    _element_wise(
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out, size_t index) {
+            if (std::fabs(b->getIndex<float>(index)) < EPSILON) {
+                std::cerr << strings::error("kernel::divide error: ") << "divide by zero error." << std::endl;
+                exit(-1);
+            }
+
+            float output = a->getIndex<float>(index) / b->getIndex<float>(index);
+            out->setIndex(index, (void*)(&output));
+        },
+        node->children_[node->arg_order_[0]]->output_, node->children_[node->arg_order_[1]]->output_, node->output_);
+}
+
+void sqrt(std::shared_ptr<Node> node) {
+    _element_wise(
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t index) {
+            if (a->getIndex<float>(index) < 0) {
+                std::cerr << strings::error("kernel::sqrt error: ")
+                          << "argument is less than zero. We don't support complex numbers yet!" << std::endl;
+                exit(-1);
+            }
+
+            float output = std::sqrt(a->getIndex<float>(index));
+            out->setIndex(index, (void*)(&output));
+        },
+        node->children_[node->arg_order_[0]]->output_, node->output_);
+}
+
+void exp(std::shared_ptr<Node> node) {
+    _element_wise(
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t index) {
+            float output = std::exp(a->getIndex<float>(index));
+            out->setIndex(index, (void*)(&output));
+        },
+        node->children_[node->arg_order_[0]]->output_, node->output_);
+}
+
+void pow(std::shared_ptr<Node> node) {
+    _element_wise(
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out, size_t index) {
+            float output = std::pow(a->getIndex<float>(index), b->getIndex<float>(index));
+            out->setIndex(index, (void*)(&output));
+        },
+        node->children_[node->arg_order_[0]]->output_, node->children_[node->arg_order_[1]]->output_, node->output_);
+}
 
 void sigmoid(std::shared_ptr<Node> node) {
     size_t size = 1;

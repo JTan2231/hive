@@ -19,16 +19,20 @@
 #include "ops.h"
 #include "string_utils.h"
 
-Node::Node(int id) : id_(id) {}
+Node::Node(int id) : id_(id) {
+}
 
 Node::Node(std::shared_ptr<Node> node)
     : id_(node->id_),
       operation_type_(node->operation_type_),
       name_(node->name_),
       arg_order_(node->arg_order_),
-      shape_(node->shape_) {}
+      shape_(node->shape_) {
+}
 
-int Node::getId() { return id_; }
+int Node::getId() {
+    return id_;
+}
 
 std::string _node_format(float x) {
     constexpr int precision = 6;
@@ -77,7 +81,8 @@ void Node::printNode() {
     }
 }
 
-Graph::Graph() {}
+Graph::Graph() {
+}
 
 Graph::Graph(std::shared_ptr<Graph> graph) {
     for (auto& [id, node] : graph->nodes_) {
@@ -191,7 +196,9 @@ std::string Graph::createVariable(const std::string& name, const std::string& op
     return new_node->name_;
 }
 
-bool Graph::isNode(int id) { return nodes_.find(id) != nodes_.end(); }
+bool Graph::isNode(int id) {
+    return nodes_.find(id) != nodes_.end();
+}
 
 std::shared_ptr<Node> Graph::getNode(int id) {
     if (!isNode(id)) {
@@ -269,15 +276,25 @@ void Graph::createConstant(int constant) {
     constant_map_[constant] = constant_ptr;
 }
 
-bool Graph::isVariable(const std::string& name) { return variable_map_.find(alias_map_[name]) != variable_map_.end(); }
+bool Graph::isVariable(const std::string& name) {
+    return variable_map_.find(alias_map_[name]) != variable_map_.end();
+}
 
-void Graph::evaluate() { topologicalSort(kernel::computeNode); }
+void Graph::evaluate() {
+    topologicalSort(kernel::computeNode);
+}
 
-void Graph::allocate() { topologicalSort(allocation::allocateNode); }
+void Graph::allocate() {
+    topologicalSort(allocation::allocateNode);
+}
 
-void _print_node(std::shared_ptr<Node> node) { node->printNode(); }
+void _print_node(std::shared_ptr<Node> node) {
+    node->printNode();
+}
 
-void Graph::print() { topologicalSort(_print_node); }
+void Graph::print() {
+    topologicalSort(_print_node);
+}
 
 // topological sort
 // the number of edges a node has is determined by how many of its children's subgraphs are fully evaluated
