@@ -215,6 +215,11 @@ std::vector<std::shared_ptr<Node>> Graph::getInputs() {
     return inputs;
 }
 
+// this is really gross
+// one single node in the original graph that points to a separate graph
+// which contains the function
+//
+// can this separate graph just be merged into the original graph?
 std::string Graph::createFunctionVariable(const std::string& name, const std::vector<std::string>& arguments,
                                           const std::shared_ptr<Graph> graph) {
     std::shared_ptr<Node> new_node = _create_variable(name, operations::function, arguments);
@@ -227,6 +232,8 @@ std::string Graph::createFunctionVariable(const std::string& name, const std::ve
 
     std::vector<std::shared_ptr<Node>> inputs;
     int _id = 0;
+
+    // inputs will ALWAYS (I think?) be the first nodes registered on the graph
     while (graph_copy->isNode(_id) && graph_copy->getNode(_id)->operation_type_ == operations::input) {
         inputs.push_back(graph_copy->getNode(_id));
         _id++;
@@ -240,13 +247,10 @@ std::string Graph::createFunctionVariable(const std::string& name, const std::ve
         exit(-1);
     }
 
-    // arguments *should* retain their order
+    // map each input node -> related argument node
     for (int i = 0; i < inputs.size(); i++) {
-        inputs[i]->shape_ = variable_map_[alias_map_[arguments[i]]]->shape_;
+        inputs[i]->input_mapping_ = variable_map_[alias_map_[arguments[i]]];
     }
-
-    std::cout << strings::debug("GRAPH COPY CHECK") << std::endl;
-    new_node->graph_->print();
 
     return new_node->name_;
 }

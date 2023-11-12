@@ -175,7 +175,6 @@ std::shared_ptr<Graph> NNParser::parse(const std::string& contents) {
             if (buffer_.back() == ' ') {
                 std::string function_name = registerFunctionName(contents);
                 incrementCursor();
-                std::cout << strings::debug("FOUND FUNCTION NAME: ") << strings::info(function_name) << std::endl;
 
                 // are we just assuming all variables are tensors ????
                 std::vector<std::string> args;
@@ -208,8 +207,6 @@ std::shared_ptr<Graph> NNParser::parse(const std::string& contents) {
                     args.push_back(arg_buffer);
                 }
 
-                std::cout << strings::debug("ARGS: ") << strings::info(strings::vecToString(args)) << std::endl;
-
                 incrementCursor();
 
                 // functions will be subgraphs pointed to by a function node in the main graph
@@ -239,8 +236,6 @@ std::shared_ptr<Graph> NNParser::parse(const std::string& contents) {
                 // do we have to instantiate a separate parser?
                 NNParser function_parser(function_definition.size(), args);
                 std::shared_ptr<Graph> function_graph = function_parser.parse(function_definition);
-                std::cout << strings::debug("FINISHED PARSING FUNCTION") << std::endl;
-                function_graph->listNodes();
 
                 registered_functions_[function_name] = function_graph;
 
@@ -427,7 +422,8 @@ std::string NNParser::registerVariableDefinition(std::shared_ptr<Graph> graph, s
                 if (isNumeric(arg_buffer)) {
                     args.push_back(arg_buffer);
                     arg_buffer = "";
-                } else if (OperationRegistry::valid(arg_buffer)) {
+                } else if (OperationRegistry::valid(arg_buffer) ||
+                           registered_functions_.find(arg_buffer) != registered_functions_.end()) {
                     // this arg is the result of an operation
                     // get the result and attach it here
                     arg_buffer = registerVariableDefinition(graph, arg_buffer, contents, true);

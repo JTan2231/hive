@@ -9,7 +9,7 @@ int main() {
 
     nn_parser::NNParser parser(contents);
     std::shared_ptr<Graph> g = parser.parse(contents);
-    g->listNodes();
+    // g->listNodes();
     g->allocate();
     g->evaluate();
     g->printNodeValues();

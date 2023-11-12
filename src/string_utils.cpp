@@ -8,11 +8,11 @@
 #include <string>
 #include <vector>
 
+#include "graph.h"
+
 namespace strings {
 
-bool isAlphanumeric(char c) {
-    return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_';
-}
+bool isAlphanumeric(char c) { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_'; }
 
 // misleading function name
 // punctuation counts as numeric here
@@ -57,16 +57,16 @@ std::string randomString(size_t length) {
     return str;
 }
 
-std::string error(std::string s) {
-    return "\033[31m" + s + "\033[0m";
-}
+std::string error(std::string s) { return "\033[31m" + s + "\033[0m"; }
 
-std::string info(std::string s) {
-    return "\033[34m" + s + "\033[0m";
-}
+std::string info(std::string s) { return "\033[34m" + s + "\033[0m"; }
 
-std::string debug(std::string s) {
-    return "\033[33m" + s + "\033[0m";
+std::string debug(std::string s) { return "\033[33m" + s + "\033[0m"; }
+
+void _error_node(const std::string& message, std::shared_ptr<Node> n) {
+    std::cout << error(message) << std::endl;
+    n->printNode();
+    std::cout << error("END " + message) << std::endl;
 }
 
 }  // namespace strings

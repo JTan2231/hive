@@ -25,7 +25,16 @@ namespace allocation {
 
 // TODO: shapes need figured out to a cleaner solution
 
-void inputAllocate(std::shared_ptr<Node> node) {}
+void inputAllocate(std::shared_ptr<Node> node) {
+    if (!node->input_mapping_) {
+        std::cerr << strings::error("allocation::inputAllocation error: ") << strings::info("node->input_mapping_ ")
+                  << "is null. How did this happen?" << std::endl;
+        exit(-1);
+    }
+
+    node->shape_ = node->input_mapping_->shape_;
+    node->output_ = node->input_mapping_->output_;
+}
 
 // these functions allocate buffers for their given nodes
 void tensorAllocate(std::shared_ptr<Node> node) {
@@ -121,8 +130,6 @@ void functionAllocate(std::shared_ptr<Node> node) {
         inputs[i]->output_ = node->children_[node->arg_order_[i]]->output_;
         inputs[i]->shape_ = node->children_[node->arg_order_[i]]->shape_;
     }
-
-    node->graph_->print();
 }
 
 // all constants will be assumed to be 32-bit float values

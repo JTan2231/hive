@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "graph.h"
+
 namespace strings {
 
 bool isAlphanumeric(char c);
@@ -40,6 +42,8 @@ std::string randomString(size_t length);
 std::string error(std::string s);
 std::string info(std::string s);
 std::string debug(std::string s);
+
+void _error_node(const std::string& message, std::shared_ptr<Node> n);
 
 }  // namespace strings
 

@@ -34,6 +34,10 @@ class Node {
     std::vector<std::string> arg_order_;
     std::map<std::string, std::shared_ptr<Node>> children_;
 
+    // this is only used by input nodes
+    // to figure out their shape during an allocation call
+    std::shared_ptr<Node> input_mapping_;
+
     std::shared_ptr<Buffer> output_;
 
     std::vector<int> shape_;
