@@ -1,0 +1,6 @@
+let x = normal(5, 5)
+let y = normal(5, 5)
+
+let f = multiply(x, x)
+f = add(f, multiply(x, y))
+f = add(f, multiply(y, y))

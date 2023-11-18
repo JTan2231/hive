@@ -44,6 +44,7 @@ void inputAllocate(std::shared_ptr<Node> node) {
 
     node->shape_ = node->input_mapping_->shape_;
     node->output_ = node->input_mapping_->output_;
+    node->gradient_ = node->input_mapping_->gradient_;
 }
 
 // these functions allocate buffers for their given nodes
@@ -58,6 +59,7 @@ void tensorAllocate(std::shared_ptr<Node> node) {
     }
 
     node->output_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
+    node->gradient_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
     node->shape_ = shape;
 }
 
@@ -67,6 +69,8 @@ void tensorAllocate(std::shared_ptr<Node> node) {
 // e.g. pemdas, pow, etc.
 void _element_wise_allocate(std::shared_ptr<Node> node) {
     node->output_ =
+        std::shared_ptr<Buffer>(new Buffer(node->children_[node->arg_order_[0]]->output_->size(), DTYPE::float32));
+    node->gradient_ =
         std::shared_ptr<Buffer>(new Buffer(node->children_[node->arg_order_[0]]->output_->size(), DTYPE::float32));
     node->shape_ = node->children_[node->arg_order_[0]]->shape_;
 }
@@ -160,6 +164,7 @@ void matmulAllocate(std::shared_ptr<Node> node) {
     size *= shape_a[n - 2] * shape_b[n - 1];
 
     node->output_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
+    node->gradient_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
     node->shape_ = new_shape;
 }
 
@@ -168,6 +173,7 @@ void functionAllocate(std::shared_ptr<Node> node) {
     std::shared_ptr<Node> head = node->graph_->getHead();
     node->shape_ = head->shape_;
     node->output_ = head->output_;
+    node->gradient_ = head->gradient_;
 
     // connect argument nodes to input nodes in function graph
     std::vector<std::shared_ptr<Node>> inputs = node->graph_->getInputs();
@@ -188,11 +194,17 @@ void functionAllocate(std::shared_ptr<Node> node) {
 }
 
 // all constants will be assumed to be 32-bit float values
+// does gradient_ need allocated here?
+// trivial memory usage either way
 void constantAllocate(std::shared_ptr<Node> node) {
     node->output_ = std::shared_ptr<Buffer>(new Buffer(1, DTYPE::float32));
+    node->gradient_ = std::shared_ptr<Buffer>(new Buffer(1, DTYPE::float32));
 
     float value = std::stof(node->name_);
+    float zero = 0;
+
     node->output_->setIndex(0, (void*)(&value));
+    node->gradient_->setIndex(0, (void*)(&zero));
 }
 
 void normalAllocate(std::shared_ptr<Node> node) {
@@ -223,24 +235,13 @@ void onesAllocate(std::shared_ptr<Node> node) {
 }
 
 void sigmoidAllocate(std::shared_ptr<Node> node) {
-    if (node->children_.size() != 1) {
-        std::cerr << strings::error("allocation::sigmoidAllocate error: ") << strings::info("sigmoid ")
-                  << "operation takes only one argument, got " << node->children_.size() << std::endl;
-        exit(-1);
-    }
-
-    size_t size = 1;
-    std::vector<int> shape = node->children_[node->arg_order_[0]]->shape_;
-    for (int i : shape) {
-        size *= i;
-    }
-
-    node->output_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
-    node->shape_ = shape;
+    _input_validator(1, node->children_.size(), "sigmoid");
+    _element_wise_allocate(node);
 }
 
 void reluAllocate(std::shared_ptr<Node> node) {
-    sigmoidAllocate(node);
+    _input_validator(1, node->children_.size(), "relu");
+    _element_wise_allocate(node);
 }
 
 void allocateNode(std::shared_ptr<Node> node) {

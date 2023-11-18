@@ -20,6 +20,7 @@ class Graph;
 
 // probably needs moved
 
+// this class feels like it's getting too fat
 class Node {
    public:
     Node(int id);
@@ -34,16 +35,20 @@ class Node {
     std::vector<std::string> arg_order_;
     std::map<std::string, std::shared_ptr<Node>> children_;
 
+    // TODO: should i overload this class?
     // this is only used by input nodes
     // to figure out their shape during an allocation call
     std::shared_ptr<Node> input_mapping_;
 
     std::shared_ptr<Buffer> output_;
+    std::shared_ptr<Buffer> gradient_;
 
     std::vector<int> shape_;
 
     // this is only used if operation_type_ == operations::function
     std::shared_ptr<Graph> graph_;
+
+    void propagate(std::shared_ptr<Node> predecessor);
 
     void printOutput();
 

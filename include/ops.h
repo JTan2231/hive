@@ -11,6 +11,7 @@ class Node;
 // Function prototype
 using FuncType = void (*)(std::shared_ptr<Node>);
 
+// is there a better way of doing this?
 class OperationRegistry {
    public:
     static std::unordered_map<std::string, FuncType>& GetOperationMap() {
@@ -23,11 +24,17 @@ class OperationRegistry {
         return alMap;
     }
 
-    template <const char* str, FuncType opFunc, FuncType alFunc>
+    static std::unordered_map<std::string, FuncType>& GetGradientMap() {
+        static std::unordered_map<std::string, FuncType> gradMap;
+        return gradMap;
+    }
+
+    template <const char* str, FuncType opFunc, FuncType alFunc, FuncType gradFunc>
     struct AutoRegisterOperation {
         AutoRegisterOperation() {
             OperationRegistry::GetOperationMap()[str] = opFunc;
             OperationRegistry::GetAllocationMap()[str] = alFunc;
+            OperationRegistry::GetGradientMap()[str] = gradFunc;
         }
     };
 
@@ -49,8 +56,12 @@ class OperationRegistry {
     namespace allocation {                                                                                 \
     void name##Allocate(std::shared_ptr<Node>);                                                            \
     }                                                                                                      \
+    namespace gradient {                                                                                   \
+    void name##Gradient(std::shared_ptr<Node>);                                                            \
+    }                                                                                                      \
     const char _str_##name[] = #name;                                                                      \
-    static OperationRegistry::AutoRegisterOperation<_str_##name, kernel::name, allocation::name##Allocate> \
+    static OperationRegistry::AutoRegisterOperation<_str_##name, kernel::name, allocation::name##Allocate, \
+                                                    gradient::name##Gradient>                              \
         _reg_op_##name;                                                                                    \
     namespace operations {                                                                                 \
     const std::string name = _str_##name;                                                                  \
