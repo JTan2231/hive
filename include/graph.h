@@ -33,6 +33,8 @@ class Node {
     std::string name_;
 
     std::vector<std::string> arg_order_;
+
+    // inputs to the node
     std::map<std::string, std::shared_ptr<Node>> children_;
 
     // TODO: should i overload this class?
@@ -47,8 +49,6 @@ class Node {
 
     // this is only used if operation_type_ == operations::function
     std::shared_ptr<Graph> graph_;
-
-    void propagate(std::shared_ptr<Node> predecessor);
 
     void printOutput();
 
@@ -65,6 +65,8 @@ class Graph {
     Graph();
 
     Graph(std::shared_ptr<Graph> graph);
+
+    std::string getUniqueNodeName(const std::string& name);
 
     std::shared_ptr<Node> newNode();
 
@@ -117,10 +119,14 @@ class Graph {
     // this isn't really used, do we need it?
     std::map<int, std::set<int>> edges_;  // id -> { neighbor_ids... } outgoing edges
 
+    // this is the most reliable list of nodes in the graph
     std::map<int, std::shared_ptr<Node>> nodes_;  // id -> Node*
 
     std::map<int, std::shared_ptr<Node>> constant_map_;
     std::map<std::string, std::shared_ptr<Node>> variable_map_;
+
+    // container for used functions in the graph
+    std::vector<std::shared_ptr<Graph>> subgraphs_;
 
     std::shared_ptr<Node> _create_variable(const std::string& name, const std::string& operation_type,
                                            const std::vector<std::string>& arguments);

@@ -85,10 +85,6 @@ void matmul(std::shared_ptr<Node> node) {
     }
 }
 
-void function(std::shared_ptr<Node> node) {
-    node->graph_->evaluate();
-}
-
 void input(std::shared_ptr<Node> node) {
 }
 

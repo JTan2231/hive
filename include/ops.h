@@ -29,12 +29,11 @@ class OperationRegistry {
         return gradMap;
     }
 
-    template <const char* str, FuncType opFunc, FuncType alFunc, FuncType gradFunc>
+    template <const char* str, FuncType opFunc, FuncType alFunc>
     struct AutoRegisterOperation {
         AutoRegisterOperation() {
             OperationRegistry::GetOperationMap()[str] = opFunc;
             OperationRegistry::GetAllocationMap()[str] = alFunc;
-            OperationRegistry::GetGradientMap()[str] = gradFunc;
         }
     };
 
@@ -56,12 +55,8 @@ class OperationRegistry {
     namespace allocation {                                                                                 \
     void name##Allocate(std::shared_ptr<Node>);                                                            \
     }                                                                                                      \
-    namespace gradient {                                                                                   \
-    void name##Gradient(std::shared_ptr<Node>);                                                            \
-    }                                                                                                      \
     const char _str_##name[] = #name;                                                                      \
-    static OperationRegistry::AutoRegisterOperation<_str_##name, kernel::name, allocation::name##Allocate, \
-                                                    gradient::name##Gradient>                              \
+    static OperationRegistry::AutoRegisterOperation<_str_##name, kernel::name, allocation::name##Allocate> \
         _reg_op_##name;                                                                                    \
     namespace operations {                                                                                 \
     const std::string name = _str_##name;                                                                  \
@@ -84,7 +79,6 @@ REGISTER_OPERATION(exp);
 REGISTER_OPERATION(pow);
 
 REGISTER_OPERATION(matmul);
-REGISTER_OPERATION(function);
 
 REGISTER_OPERATION(sigmoid);
 REGISTER_OPERATION(relu);

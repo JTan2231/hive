@@ -19,6 +19,9 @@
 #include "ops.h"
 #include "string_utils.h"
 
+// TODO: there NEEDS to be some sort of differentiator between differentiable variables and constant numbers
+//       this is probably a language problem. new keyword? const vs var?
+
 Node::Node(int id) : id_(id) {
 }
 
@@ -103,6 +106,15 @@ Graph::Graph(std::shared_ptr<Graph> graph) {
     }
 
     alias_map_ = graph->alias_map_;
+}
+
+std::string Graph::getUniqueNodeName(const std::string& name) {
+    std::string unique_name = name;
+    while (variable_map_.find(unique_name) != variable_map_.end()) {
+        unique_name = name + "_" + strings::randomString(5);
+    }
+
+    return unique_name;
 }
 
 std::shared_ptr<Node> Graph::newNode() {
@@ -229,18 +241,29 @@ std::vector<std::shared_ptr<Node>> Graph::getInputs() {
 // can this separate graph just be merged into the original graph?
 std::string Graph::createFunctionVariable(const std::string& name, const std::vector<std::string>& arguments,
                                           const std::shared_ptr<Graph> graph) {
-    std::shared_ptr<Node> new_node = _create_variable(name, operations::function, arguments);
-    std::shared_ptr<Graph> graph_copy(new Graph(graph));
-    new_node->graph_ = graph_copy;
+    // i have no clue what's happening here
+    std::unique_ptr<Graph> graph_copy(new Graph(graph));
+    std::shared_ptr<Node> head = graph_copy->getHead();
 
-    std::shared_ptr<Node> head = new_node->graph_->getHead();
-    new_node->output_ = head->output_;
-    new_node->shape_ = head->shape_;
+    // register all subgraph nodes in the main graph
+    for (auto& [id, node] : graph_copy->nodes_) {
+        if (node != head) {
+            node->name_ = getUniqueNodeName(node->name_);
+        } else {
+            std::cout << name << " vs " << getUniqueNodeName(name) << std::endl;
+            node->name_ = name;
+        }
+
+        nodes_[id] = node;
+        variable_map_[node->name_] = node;
+        alias_map_[node->name_] = node->name_;
+    }
 
     std::vector<std::shared_ptr<Node>> inputs;
     int _id = 0;
 
     // inputs will ALWAYS (I think?) be the first nodes registered on the graph
+    // this grabs the first N nodes in the graph_copy with the above assumption that they're inputs
     while (graph_copy->isNode(_id) && graph_copy->getNode(_id)->operation_type_ == operations::input) {
         inputs.push_back(graph_copy->getNode(_id));
         _id++;
@@ -256,10 +279,11 @@ std::string Graph::createFunctionVariable(const std::string& name, const std::ve
 
     // map each input node -> related argument node
     for (int i = 0; i < inputs.size(); i++) {
-        inputs[i]->input_mapping_ = variable_map_[alias_map_[arguments[i]]];
+        std::shared_ptr<Node> input_node = variable_map_[alias_map_[arguments[i]]];
+        inputs[i]->children_[input_node->name_] = input_node;
     }
 
-    return new_node->name_;
+    return head->name_;
 }
 
 void Graph::createConstant(int constant) {
@@ -323,6 +347,8 @@ void Graph::topologicalSort(std::function<void(std::shared_ptr<Node>)> visit_fun
     while (!q.empty()) {
         current = q.front();
         q.pop();
+
+        std::cout << strings::error("VISITING NODE TYPE: " + current->operation_type_) << std::endl;
 
         visit_function(current);
 

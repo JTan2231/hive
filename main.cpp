@@ -4,13 +4,13 @@
 using namespace std;
 
 int main() {
-    const string filepath = "./nn/binary.nn";
+    const string filepath = "./nn/function.nn";
     const string contents = nn_parser::readFile(filepath);
 
     nn_parser::NNParser parser(contents);
     std::shared_ptr<Graph> g = parser.parse(contents);
-    // g->listNodes();
+    g->print();
     g->allocate();
-    g->evaluate();
-    g->printNodeValues();
+    // g->evaluate();
+    // g->printNodeValues();
 }

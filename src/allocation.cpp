@@ -35,16 +35,15 @@ void _input_validator(size_t expected, size_t received, const std::string& opera
     }
 }
 
+// this doesn't actually allocate anything, but the connections are made between the relevant properties
 void inputAllocate(std::shared_ptr<Node> node) {
-    if (!node->input_mapping_) {
-        std::cerr << strings::error("allocation::inputAllocation error: ") << strings::info("node->input_mapping_ ")
-                  << "is null. How did this happen?" << std::endl;
-        exit(-1);
-    }
+    std::shared_ptr<Node> input_node = node->children_[node->arg_order_[0]];
 
-    node->shape_ = node->input_mapping_->shape_;
-    node->output_ = node->input_mapping_->output_;
-    node->gradient_ = node->input_mapping_->gradient_;
+    std::cout << strings::error("WIRED " + node->name_ + " TO " + input_node->name_) << std::endl;
+
+    node->shape_ = input_node->shape_;
+    node->output_ = input_node->output_;
+    node->gradient_ = input_node->gradient_;
 }
 
 // these functions allocate buffers for their given nodes
@@ -166,31 +165,6 @@ void matmulAllocate(std::shared_ptr<Node> node) {
     node->output_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
     node->gradient_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
     node->shape_ = new_shape;
-}
-
-void functionAllocate(std::shared_ptr<Node> node) {
-    node->graph_->allocate();
-    std::shared_ptr<Node> head = node->graph_->getHead();
-    node->shape_ = head->shape_;
-    node->output_ = head->output_;
-    node->gradient_ = head->gradient_;
-
-    // connect argument nodes to input nodes in function graph
-    std::vector<std::shared_ptr<Node>> inputs = node->graph_->getInputs();
-    std::sort(inputs.begin(), inputs.end(),
-              [](const std::shared_ptr<Node> a, const std::shared_ptr<Node> b) { return a->getId() < b->getId(); });
-
-    if (inputs.size() != node->arg_order_.size()) {
-        std::cerr << strings::error("kernel::functionAllocate error: ")
-                  << "input.size() and arg_order_.size() -- how did this happen?" << std::endl;
-
-        exit(-1);
-    }
-
-    for (int i = 0; i < inputs.size(); i++) {
-        inputs[i]->output_ = node->children_[node->arg_order_[i]]->output_;
-        inputs[i]->shape_ = node->children_[node->arg_order_[i]]->shape_;
-    }
 }
 
 // all constants will be assumed to be 32-bit float values
