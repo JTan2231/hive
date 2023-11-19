@@ -37,9 +37,7 @@ void _input_validator(size_t expected, size_t received, const std::string& opera
 
 // this doesn't actually allocate anything, but the connections are made between the relevant properties
 void inputAllocate(std::shared_ptr<Node> node) {
-    std::shared_ptr<Node> input_node = node->children_[node->arg_order_[0]];
-
-    std::cout << strings::error("WIRED " + node->name_ + " TO " + input_node->name_) << std::endl;
+    std::shared_ptr<Node> input_node = node->children_.begin()->second;
 
     node->shape_ = input_node->shape_;
     node->output_ = input_node->output_;
@@ -144,8 +142,18 @@ void matmulAllocate(std::shared_ptr<Node> node) {
     }
 
     if (shape_a.size() < 2 || shape_b.size() < 2) {
+        node->printNode();
+
+        std::cout << strings::error("INPUT NAMES: ") << strings::info(node->children_[node->arg_order_[0]]->name_)
+                  << " and " << strings::info(node->children_[node->arg_order_[1]]->name_) << std::endl;
+
+        node->children_[node->arg_order_[0]]->printNode();
+        node->children_[node->arg_order_[1]]->printNode();
+
         std::cerr << strings::error("allocation::matmulAllocateError: ")
-                  << "matmul shapes must be at least 2 dimensions in shape" << std::endl;
+                  << "matmul shapes must be at least 2 dimensions in shape, got "
+                  << strings::info(strings::vecToString(shape_a)) << " and "
+                  << strings::info(strings::vecToString(shape_b)) << std::endl;
         exit(-1);
     }
 

@@ -234,39 +234,80 @@ std::vector<std::shared_ptr<Node>> Graph::getInputs() {
     return inputs;
 }
 
-// this is really gross
-// one single node in the original graph that points to a separate graph
-// which contains the function
-//
-// can this separate graph just be merged into the original graph?
+// created during function calls
+// function graph is cloned then merged into the main graph
 std::string Graph::createFunctionVariable(const std::string& name, const std::vector<std::string>& arguments,
                                           const std::shared_ptr<Graph> graph) {
     // i have no clue what's happening here
     std::unique_ptr<Graph> graph_copy(new Graph(graph));
     std::shared_ptr<Node> head = graph_copy->getHead();
 
+    std::vector<std::shared_ptr<Node>> inputs(arguments.size());
+
+    std::map<std::string, std::string> name_map;
+
     // register all subgraph nodes in the main graph
     for (auto& [id, node] : graph_copy->nodes_) {
+        std::string old_name = node->name_;
         if (node != head) {
             node->name_ = getUniqueNodeName(node->name_);
         } else {
-            std::cout << name << " vs " << getUniqueNodeName(name) << std::endl;
             node->name_ = name;
         }
 
-        nodes_[id] = node;
+        // node->id_ will always be < arguments.size() if the node is an input node
+        if (node->operation_type_ == operations::input) {
+            std::shared_ptr<Node> input_node = variable_map_[alias_map_[arguments[node->id_]]];
+            inputs[node->id_] = node;
+            inputs[node->id_]->children_[input_node->name_] = input_node;
+        }
+
+        node->id_ = node_index_;
+        node_index_++;
+
+        nodes_[node_index_] = node;
         variable_map_[node->name_] = node;
         alias_map_[node->name_] = node->name_;
+
+        name_map[old_name] = node->name_;
+
+        std::cout << strings::error(old_name + " -> " + node->name_) << std::endl;
     }
 
-    std::vector<std::shared_ptr<Node>> inputs;
-    int _id = 0;
+    for (auto& [id, node] : graph_copy->nodes_) {
+        if (node->operation_type_ == operations::input) {
+            continue;
+        }
 
-    // inputs will ALWAYS (I think?) be the first nodes registered on the graph
-    // this grabs the first N nodes in the graph_copy with the above assumption that they're inputs
-    while (graph_copy->isNode(_id) && graph_copy->getNode(_id)->operation_type_ == operations::input) {
-        inputs.push_back(graph_copy->getNode(_id));
-        _id++;
+        std::map<std::string, std::shared_ptr<Node>> renamed_children;
+        for (auto& [name, child] : node->children_) {
+            if (name_map.find(name) == name_map.end() ||
+                std::find(node->arg_order_.begin(), node->arg_order_.end(), name) == node->arg_order_.end()) {
+                std::cerr << strings::error("Cannot find name ") << name << std::endl;
+                exit(-1);
+            }
+
+            renamed_children[name_map[name]] = child;
+            for (int i = 0; i < node->arg_order_.size(); i++) {
+                if (node->arg_order_[i] == name) {
+                    node->arg_order_[i] = name_map[name];
+                }
+            }
+        }
+
+        node->children_ = renamed_children;
+
+        std::cout << strings::debug("arg order check: ") << std::endl;
+        for (auto& arg : node->arg_order_) {
+            bool there = node->children_.find(arg) != node->children_.end();
+            std::cout << strings::debug("  - " + arg + ": " + (there ? "true" : "false")) << std::endl;
+
+            if (!there) {
+                std::cerr << strings::error("Graph::createFunctionVariable error: ") << "could not find mapping for "
+                          << strings::info(arg) << std::endl;
+                exit(-1);
+            }
+        }
     }
 
     if (arguments.size() != inputs.size()) {
@@ -275,12 +316,6 @@ std::string Graph::createFunctionVariable(const std::string& name, const std::ve
                   << strings::info(std::to_string(arguments.size())) << " and "
                   << strings::info(std::to_string(inputs.size())) << std::endl;
         exit(-1);
-    }
-
-    // map each input node -> related argument node
-    for (int i = 0; i < inputs.size(); i++) {
-        std::shared_ptr<Node> input_node = variable_map_[alias_map_[arguments[i]]];
-        inputs[i]->children_[input_node->name_] = input_node;
     }
 
     return head->name_;
@@ -347,8 +382,6 @@ void Graph::topologicalSort(std::function<void(std::shared_ptr<Node>)> visit_fun
     while (!q.empty()) {
         current = q.front();
         q.pop();
-
-        std::cout << strings::error("VISITING NODE TYPE: " + current->operation_type_) << std::endl;
 
         visit_function(current);
 

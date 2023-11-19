@@ -1,5 +1,6 @@
 function my_function(a, b, c)
     let d = matmul(c, matmul(a, b))
+    d = matmul(d, matmul(d, d))
 end
 
 let a = normal(3, 5)
@@ -12,4 +13,3 @@ let f = normal(3, 3)
 let g = my_function(a, b, c)
 let h = my_function(d, e, f)
 let i = my_function(g, h, f)
-let j = my_function(my_function(g, h, i), e, f)
