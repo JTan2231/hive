@@ -15,6 +15,7 @@
 
 #include "allocation.h"
 #include "buffer.h"
+#include "grad.h"
 #include "kernel.h"
 #include "ops.h"
 #include "string_utils.h"
@@ -47,6 +48,8 @@ std::string _node_format(float x) {
     return stream.str();
 }
 
+// these two print functions can probably be abstracted
+
 void Node::printOutput() {
     std::vector<int> indices(shape_.size(), 0);
     std::vector<int> end;
@@ -72,6 +75,33 @@ void Node::printOutput() {
     }
 
     std::cout << strings::debug(_node_format(output_->getIndex<float>(calculateIndex(end, shape_)))) << std::endl;
+}
+
+void Node::printGradient() {
+    std::vector<int> indices(shape_.size(), 0);
+    std::vector<int> end;
+    for (int i : shape_) {
+        end.push_back(i - 1);
+    }
+
+    std::cout << "    ";
+    while (indices != end) {
+        int i = indices.size() - 1;
+        for (int i = indices.size() - 1; i > 0 && indices[i] > end[i]; i--) {
+            indices[i] = 0;
+            indices[i - 1]++;
+
+            std::cout << std::endl << "    ";
+        }
+
+        std::string output = _node_format(gradient_->getIndex<float>(calculateIndex(indices, shape_)));
+
+        std::cout << strings::debug(output + ", ");
+
+        indices[indices.size() - 1]++;
+    }
+
+    std::cout << strings::debug(_node_format(gradient_->getIndex<float>(calculateIndex(end, shape_)))) << std::endl;
 }
 
 void Node::printNode() {
@@ -270,8 +300,6 @@ std::string Graph::createFunctionVariable(const std::string& name, const std::ve
         alias_map_[node->name_] = node->name_;
 
         name_map[old_name] = node->name_;
-
-        std::cout << strings::error(old_name + " -> " + node->name_) << std::endl;
     }
 
     for (auto& [id, node] : graph_copy->nodes_) {
@@ -297,12 +325,8 @@ std::string Graph::createFunctionVariable(const std::string& name, const std::ve
 
         node->children_ = renamed_children;
 
-        std::cout << strings::debug("arg order check: ") << std::endl;
         for (auto& arg : node->arg_order_) {
-            bool there = node->children_.find(arg) != node->children_.end();
-            std::cout << strings::debug("  - " + arg + ": " + (there ? "true" : "false")) << std::endl;
-
-            if (!there) {
+            if (!(node->children_.find(arg) != node->children_.end())) {
                 std::cerr << strings::error("Graph::createFunctionVariable error: ") << "could not find mapping for "
                           << strings::info(arg) << std::endl;
                 exit(-1);
@@ -353,6 +377,32 @@ void _print_node(std::shared_ptr<Node> node) {
 
 void Graph::print() {
     topologicalSort(_print_node);
+}
+
+// bfs to propagate the gradient calculation down from the head
+std::unordered_map<std::string, std::shared_ptr<Node>> Graph::gradient() {
+    std::unordered_map<std::string, std::shared_ptr<Node>> out;
+
+    std::queue<std::shared_ptr<Node>> q;
+    q.push(getHead());
+
+    std::shared_ptr<Node> current;
+    while (!q.empty()) {
+        current = q.front();
+        q.pop();
+
+        gradient::propagateNode(current);
+
+        for (auto& [name, child] : current->children_) {
+            q.push(child);
+        }
+    }
+
+    for (auto& [id, node] : nodes_) {
+        out[node->name_] = node;
+    }
+
+    return out;
 }
 
 // topological sort

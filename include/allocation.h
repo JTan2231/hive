@@ -15,21 +15,6 @@ namespace allocation {
 
 void _input_validator(size_t expected, size_t received, const std::string& operation);
 
-void inputAllocate(std::shared_ptr<Node> node);
-
-// these functions allocate buffers for their given nodes
-void tensorAllocate(std::shared_ptr<Node> node);
-
-// NOTE: broadcasting is currently not supported
-//       this means given inputs MUST be the same shape,
-//       save for the last two dimensions
-void matmulAllocate(std::shared_ptr<Node> node);
-
-// all constants will be assumed to be 32-bit float values
-void constantAllocate(std::shared_ptr<Node> node);
-
-void normalAllocate(std::shared_ptr<Node> node);
-
 void allocateNode(std::shared_ptr<Node> node);
 
 }  // namespace allocation

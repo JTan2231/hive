@@ -29,11 +29,12 @@ class OperationRegistry {
         return gradMap;
     }
 
-    template <const char* str, FuncType opFunc, FuncType alFunc>
+    template <const char* str, FuncType opFunc, FuncType alFunc, FuncType gradFunc>
     struct AutoRegisterOperation {
         AutoRegisterOperation() {
             OperationRegistry::GetOperationMap()[str] = opFunc;
             OperationRegistry::GetAllocationMap()[str] = alFunc;
+            OperationRegistry::GetGradientMap()[str] = gradFunc;
         }
     };
 
@@ -42,9 +43,10 @@ class OperationRegistry {
     }
 };
 
-// two things are required for an operation registration:
+// three things are required for an operation registration:
 //   - a function for the kernel computation
 //   - a function for memory allocation
+//   - a function for gradient calculation
 //
 // operation names are accessible through the operations namespace
 // e.g. operations::tensor
@@ -55,8 +57,12 @@ class OperationRegistry {
     namespace allocation {                                                                                 \
     void name##Allocate(std::shared_ptr<Node>);                                                            \
     }                                                                                                      \
+    namespace gradient {                                                                                   \
+    void name##Gradient(std::shared_ptr<Node>);                                                            \
+    }                                                                                                      \
     const char _str_##name[] = #name;                                                                      \
-    static OperationRegistry::AutoRegisterOperation<_str_##name, kernel::name, allocation::name##Allocate> \
+    static OperationRegistry::AutoRegisterOperation<_str_##name, kernel::name, allocation::name##Allocate, \
+                                                    gradient::name##Gradient>                              \
         _reg_op_##name;                                                                                    \
     namespace operations {                                                                                 \
     const std::string name = _str_##name;                                                                  \

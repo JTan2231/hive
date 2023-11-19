@@ -10,6 +10,7 @@
 #include <queue>
 #include <random>
 #include <set>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -51,6 +52,8 @@ class Node {
     std::shared_ptr<Graph> graph_;
 
     void printOutput();
+
+    void printGradient();
 
     void printNode();
 
@@ -102,6 +105,9 @@ class Graph {
     void allocate();
 
     void print();
+
+    // retrieve a map of the gradient of the head wrt every node in the graph
+    std::unordered_map<std::string, std::shared_ptr<Node>> gradient();
 
     // topological sort for evaluate and allocate
     void topologicalSort(std::function<void(std::shared_ptr<Node>)> visit_function);

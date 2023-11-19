@@ -57,6 +57,11 @@ void tensorAllocate(std::shared_ptr<Node> node) {
 
     node->output_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
     node->gradient_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
+    const float one = 1;
+    for (size_t i = 0; i < node->gradient_->size(); i++) {
+        node->gradient_->setIndex(i, (void*)(&one));
+    }
+
     node->shape_ = shape;
 }
 
@@ -69,41 +74,46 @@ void _element_wise_allocate(std::shared_ptr<Node> node) {
         std::shared_ptr<Buffer>(new Buffer(node->children_[node->arg_order_[0]]->output_->size(), DTYPE::float32));
     node->gradient_ =
         std::shared_ptr<Buffer>(new Buffer(node->children_[node->arg_order_[0]]->output_->size(), DTYPE::float32));
+    const float one = 1;
+    for (size_t i = 0; i < node->gradient_->size(); i++) {
+        node->gradient_->setIndex(i, (void*)(&one));
+    }
+
     node->shape_ = node->children_[node->arg_order_[0]]->shape_;
 }
 
 void addAllocate(std::shared_ptr<Node> node) {
-    _input_validator(2, node->children_.size(), "add");
+    _input_validator(2, node->arg_order_.size(), "add");
     _element_wise_allocate(node);
 }
 
 void subtractAllocate(std::shared_ptr<Node> node) {
-    _input_validator(2, node->children_.size(), "subtract");
+    _input_validator(2, node->arg_order_.size(), "subtract");
     _element_wise_allocate(node);
 }
 
 void multiplyAllocate(std::shared_ptr<Node> node) {
-    _input_validator(2, node->children_.size(), "multiply");
+    _input_validator(2, node->arg_order_.size(), "multiply");
     _element_wise_allocate(node);
 }
 
 void divideAllocate(std::shared_ptr<Node> node) {
-    _input_validator(2, node->children_.size(), "divide");
+    _input_validator(2, node->arg_order_.size(), "divide");
     _element_wise_allocate(node);
 }
 
 void sqrtAllocate(std::shared_ptr<Node> node) {
-    _input_validator(1, node->children_.size(), "sqrt");
+    _input_validator(1, node->arg_order_.size(), "sqrt");
     _element_wise_allocate(node);
 }
 
 void expAllocate(std::shared_ptr<Node> node) {
-    _input_validator(1, node->children_.size(), "exp");
+    _input_validator(1, node->arg_order_.size(), "exp");
     _element_wise_allocate(node);
 }
 
 void powAllocate(std::shared_ptr<Node> node) {
-    _input_validator(2, node->children_.size(), "pow");
+    _input_validator(2, node->arg_order_.size(), "pow");
     _element_wise_allocate(node);
 }
 
@@ -217,12 +227,12 @@ void onesAllocate(std::shared_ptr<Node> node) {
 }
 
 void sigmoidAllocate(std::shared_ptr<Node> node) {
-    _input_validator(1, node->children_.size(), "sigmoid");
+    _input_validator(1, node->arg_order_.size(), "sigmoid");
     _element_wise_allocate(node);
 }
 
 void reluAllocate(std::shared_ptr<Node> node) {
-    _input_validator(1, node->children_.size(), "relu");
+    _input_validator(1, node->arg_order_.size(), "relu");
     _element_wise_allocate(node);
 }
 
