@@ -22,6 +22,10 @@ void _element_wise(
 void _element_wise(std::function<void(std::shared_ptr<Buffer>, std::shared_ptr<Buffer>, size_t)> element_function,
                    std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out);
 
+void _element_wise(
+    std::function<void(std::shared_ptr<Buffer>, float, std::shared_ptr<Buffer>, size_t)> element_function,
+    std::shared_ptr<Buffer> a, float b, std::shared_ptr<Buffer> out);
+
 }  // namespace kernel
 
 #endif

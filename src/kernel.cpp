@@ -45,8 +45,17 @@ void _element_wise(std::function<void(std::shared_ptr<Buffer>, std::shared_ptr<B
     }
 }
 
+void _element_wise(
+    std::function<void(std::shared_ptr<Buffer>, float, std::shared_ptr<Buffer>, size_t)> element_function,
+    std::shared_ptr<Buffer> a, float b, std::shared_ptr<Buffer> out) {
+    for (size_t i = 0; i < out->size(); i++) {
+        element_function(a, b, out, i);
+    }
+}
+
 // naive implementation
 // TODO: make it not naive
+// TODO: broadcasting
 void matmul(std::shared_ptr<Node> node) {
     std::shared_ptr<Node> left_node = node->children_[node->arg_order_[0]];
     std::shared_ptr<Node> right_node = node->children_[node->arg_order_[1]];
@@ -57,9 +66,6 @@ void matmul(std::shared_ptr<Node> node) {
     std::vector<int> l_index(l, 0);
     std::vector<int> r_index(r, 0);
     std::vector<int> out_index(l, 0);
-
-    // TODO: shapes beyond 2-D
-    //       i.e. broadcasting rules
 
     for (int i = 0; i < left_node->shape_[l - 2]; i++) {
         for (int j = 0; j < right_node->shape_[r - 1]; j++) {
