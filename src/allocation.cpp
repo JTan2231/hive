@@ -182,6 +182,11 @@ void matmulAllocate(std::shared_ptr<Node> node) {
 
     node->output_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
     node->gradient_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
+    const float one = 1;
+    for (size_t i = 0; i < node->gradient_->size(); i++) {
+        node->gradient_->setIndex(i, (void*)(&one));
+    }
+
     node->shape_ = new_shape;
 }
 

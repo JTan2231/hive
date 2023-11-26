@@ -154,6 +154,9 @@ void powGradient(std::shared_ptr<Node> node) {
 // TODO: this can definitely be optimized
 // TODO: lotta repeated code here...
 void matmulGradient(std::shared_ptr<Node> node) {
+    // TODO: this entire function needs changed lol
+    //       see TensorFlow's grad op
+    //
     // f(A, B) = A @ B
     // df/dA = all elements of each column j are the sum of the elements in row j of B
     // df/dB = all elements of each row i are the sum of the elements in column i of A
@@ -220,6 +223,10 @@ void matmulGradient(std::shared_ptr<Node> node) {
             }
         }
     }
+
+    // these need changed to properly accommodate chain rule
+    // buffer_ops::multiply(node->gradient_, a->gradient_, a->gradient_);
+    // buffer_ops::multiply(node->gradient_, b->gradient_, b->gradient_);
 }
 
 void constantGradient(std::shared_ptr<Node> node) {
