@@ -5,6 +5,7 @@
 #include "buffer.h"
 #include "buffer_ops.h"
 #include "graph.h"
+#include "kernel.h"
 #include "ops.h"
 #include "string_utils.h"
 
@@ -154,79 +155,33 @@ void powGradient(std::shared_ptr<Node> node) {
 // TODO: this can definitely be optimized
 // TODO: lotta repeated code here...
 void matmulGradient(std::shared_ptr<Node> node) {
-    // TODO: this entire function needs changed lol
-    //       see TensorFlow's grad op
+    // basing this off https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/ops/math_grad.py#L1694
     //
-    // f(A, B) = A @ B
-    // df/dA = all elements of each column j are the sum of the elements in row j of B
-    // df/dB = all elements of each row i are the sum of the elements in column i of A
+    // A = [n x m]
+    // B = [m x p]
+    // f(A, B) = A @ B [n x p]
+    // grad = [n x p]
+    // df/dA = grad @ B ^ T
+    // df/dB = A ^ T @ grad
 
     std::shared_ptr<Node> a = node->children_[node->arg_order_[0]];
     std::shared_ptr<Node> b = node->children_[node->arg_order_[1]];
 
-    const std::vector<int>& shape_a = a->shape_;
-    const std::vector<int>& shape_b = b->shape_;
+    std::shared_ptr<Buffer> a_transpose(new Buffer(a->output_->size(), a->output_->dtype()));
+    std::vector<int> a_transpose_shape = a->shape_;
+    std::swap(a_transpose_shape[a->shape_.size() - 2], a_transpose_shape[a->shape_.size() - 1]);
 
-    size_t matrix_count = 1;
-    for (int i = 0; i < shape_a.size() - 2; i++) {
-        matrix_count *= shape_a[i];
-
-        if (shape_a[i] != shape_b[i]) {
-            std::cerr << strings::error("gradient::matmaulGradient error: ")
-                      << "incompatible input/output batch shapes, got " << strings::info(strings::vecToString(shape_a))
-                      << " and " << strings::info(strings::vecToString(shape_b)) << std::endl;
-            exit(-1);
-        }
-    }
-
-    int a_row_count = shape_a[shape_a.size() - 2];
-    int a_col_count = shape_a[shape_a.size() - 1];
-
-    int b_row_count = shape_b[shape_b.size() - 2];
-    int b_col_count = shape_b[shape_b.size() - 1];
-
-    size_t a_matrix_size = a_row_count * a_col_count;
-    size_t b_matrix_size = b_row_count * b_col_count;
+    std::shared_ptr<Buffer> b_transpose(new Buffer(b->output_->size(), b->output_->dtype()));
+    std::vector<int> b_transpose_shape = b->shape_;
+    std::swap(b_transpose_shape[b->shape_.size() - 2], b_transpose_shape[b->shape_.size() - 1]);
 
     // df/dA
-
-    // for each batch
-    for (size_t i = 0; i < matrix_count; i++) {
-        // for each column of a
-        for (size_t a_c = 0; a_c < a_col_count; a_c++) {
-            float sum = 0;
-            // sum row a_c of b
-            for (int b_c = 0; b_c < b_col_count; b_c++) {
-                sum += b->output_->getIndex<float>(i * b_matrix_size + (a_c * b_col_count + b_c));
-            }
-
-            // assign the column
-            for (int a_r = 0; a_r < a_row_count; a_r++) {
-                a->gradient_->setIndex(i * a_matrix_size + (a_r * a_col_count + a_c), (void*)(&sum));
-            }
-        }
-    }
+    buffer_ops::transpose(b->output_, b->shape_, b_transpose, b_transpose_shape);
+    buffer_ops::matmul(node->gradient_, b_transpose, a->gradient_, node->shape_, b_transpose_shape, a->shape_);
 
     // df/dB
-    for (size_t i = 0; i < matrix_count; i++) {
-        // for each row of b
-        for (int b_r = 0; b_r < b_row_count; b_r++) {
-            float sum = 0;
-            // sum column b_r of a
-            for (int a_r = 0; a_r < a_row_count; a_r++) {
-                sum += a->output_->getIndex<float>(i * a_matrix_size + (a_r * a_row_count + b_r));
-            }
-
-            // assign the row
-            for (int b_c = 0; b_c < b_col_count; b_c++) {
-                b->gradient_->setIndex(i * b_matrix_size + (b_r * b_col_count + b_c), (void*)(&sum));
-            }
-        }
-    }
-
-    // these need changed to properly accommodate chain rule
-    // buffer_ops::multiply(node->gradient_, a->gradient_, a->gradient_);
-    // buffer_ops::multiply(node->gradient_, b->gradient_, b->gradient_);
+    buffer_ops::transpose(a->output_, a->shape_, a_transpose, a_transpose_shape);
+    buffer_ops::matmul(a_transpose, node->gradient_, b->gradient_, a_transpose_shape, node->shape_, b->shape_);
 }
 
 void constantGradient(std::shared_ptr<Node> node) {
@@ -239,9 +194,23 @@ void onesGradient(std::shared_ptr<Node> node) {
 }
 
 void sigmoidGradient(std::shared_ptr<Node> node) {
+    // f(a) = 1 / (1 + exp(-a))
+    // df/da = f(a) * (1 - f(a))
+
+    std::shared_ptr<Node> a = node->children_[node->arg_order_[0]];
+
+    buffer_ops::add(node->output_, -1., a->gradient_);
+    buffer_ops::multiply(node->output_, a->gradient_, a->gradient_);
 }
 
 void reluGradient(std::shared_ptr<Node> node) {
+    std::shared_ptr<Node> a = node->children_[node->arg_order_[0]];
+    kernel::_element_wise(
+        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _out, size_t index) {
+            float output = _a->getIndex<float>(index) ? 1 : 0;
+            _out->setIndex(index, (void*)(&output));
+        },
+        node->output_, a->gradient_);
 }
 
 }  // namespace gradient

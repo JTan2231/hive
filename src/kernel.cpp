@@ -56,6 +56,8 @@ void _element_wise(
 // naive implementation
 // TODO: make it not naive
 // TODO: broadcasting
+// TODO [WARNING]: this DOES NOT handle tensors of rank > 2
+//                 need to update this asap
 void matmul(std::shared_ptr<Node> node) {
     std::shared_ptr<Node> left_node = node->children_[node->arg_order_[0]];
     std::shared_ptr<Node> right_node = node->children_[node->arg_order_[1]];
@@ -181,43 +183,22 @@ void pow(std::shared_ptr<Node> node) {
 }
 
 void sigmoid(std::shared_ptr<Node> node) {
-    size_t size = 1;
-    for (int i : node->shape_) {
-        size *= i;
-    }
-
-    std::shared_ptr<Node> input = node->children_[node->arg_order_[0]];
-    // probably bad approximation per ChatGPT lol
-    // TODO: change this, obviously
-    for (size_t i = 0; i < size; i++) {
-        float x = input->output_->getIndex<float>(i);
-        float output = 0;
-        if (x < -4) {
-            output = 0;
-        } else if (x > 4) {
-            output = 1;
-        } else {
-            float x2 = x * x;
-            output = x * (0.5 + 0.15012 * x2) / (1 + 0.20162 * x2);
-        }
-
-        node->output_->setIndex(i, (void*)(&output));
-    }
+    _element_wise(
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t index) {
+            float output = 1 / (1 + std::exp(-(a->getIndex<float>(index))));
+            out->setIndex(index, (void*)(&output));
+        },
+        node->children_[node->arg_order_[0]]->output_, node->output_);
 }
 
 void relu(std::shared_ptr<Node> node) {
-    size_t size = 1;
-    for (int i : node->shape_) {
-        size *= i;
-    }
-
-    std::shared_ptr<Node> input = node->children_[node->arg_order_[0]];
-    for (size_t i = 0; i < size; i++) {
-        float x = input->output_->getIndex<float>(i);
-        float output = x > 0 ? x : 0;
-
-        node->output_->setIndex(i, (void*)(&output));
-    }
+    _element_wise(
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t index) {
+            float output = a->getIndex<float>(index);
+            output = output > 0 ? output : 0;
+            out->setIndex(index, (void*)(&output));
+        },
+        node->children_[node->arg_order_[0]]->output_, node->output_);
 }
 
 }  // namespace kernel

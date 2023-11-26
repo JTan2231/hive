@@ -1,4 +1,11 @@
 let x = normal(2, 4)
 let y = normal(4, 8)
+let z = normal(8, 2)
 
 let f = matmul(x, y)
+f = matmul(z, f)
+f = matmul(f, f)
+f = add(f, normal(8, 8))
+f = divide(f, normal(8, 8))
+let FINAL = multiply(f, normal(8, 8))
+let final_f = sigmoid(FINAL)

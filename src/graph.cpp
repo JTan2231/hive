@@ -185,7 +185,9 @@ std::shared_ptr<Node> Graph::_create_variable(const std::string& name, const std
 
     variable_map_[new_node->name_] = new_node;
 
-    for (const std::string& arg : arguments) {
+    for (int i = 0; i < arguments.size(); i++) {
+        const std::string& arg = arguments[i];
+
         // TODO: will constant args always mean it's a tensor op?
         // TODO: this alias map nonsense is a headache
         if (strings::isNumeric(arg)) {
@@ -202,7 +204,8 @@ std::shared_ptr<Node> Graph::_create_variable(const std::string& name, const std
             new_node->shape_.push_back(constant);
         } else if (variable_map_.find(alias_map_[arg]) != variable_map_.end()) {
             // set the pre-existing variable node as a child
-            new_node->children_[arg] = variable_map_[alias_map_[arg]];
+            new_node->children_[alias_map_[arg]] = variable_map_[alias_map_[arg]];
+            new_node->arg_order_[i] = alias_map_[arg];
             edges_[new_node->id_].insert(variable_map_[alias_map_[arg]]->id_);
         } else if (variable_map_.find(arg) != variable_map_.end()) {
             // set the pre-existing variable node as a child

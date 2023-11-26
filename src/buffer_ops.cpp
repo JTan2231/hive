@@ -94,6 +94,18 @@ void add(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<B
         a, b, out);
 }
 
+void add(std::shared_ptr<Buffer> a, float b, std::shared_ptr<Buffer> out) {
+    _assert_equal_sizes(a, out);
+    _assert_equal_dtypes(a, out);
+
+    kernel::_element_wise(
+        [](std::shared_ptr<Buffer> _a, float _b, std::shared_ptr<Buffer> _out, size_t index) {
+            float output = _a->getIndex<float>(index) + _b;
+            _out->setIndex(index, (void*)(&output));
+        },
+        a, b, out);
+}
+
 void reciprocal(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out) {
     _assert_equal_sizes(a, out);
     _assert_equal_dtypes(a, out);
@@ -124,6 +136,31 @@ void ln(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out) {
 
             float output = std::log(_a->getIndex<float>(index));
             _out->setIndex(index, (void*)(&output));
+        },
+        a, out);
+}
+
+void sigmoid(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out) {
+    _assert_equal_sizes(a, out);
+    _assert_equal_dtypes(a, out);
+
+    kernel::_element_wise(
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t index) {
+            float output = 1 / (1 + std::exp(-(a->getIndex<float>(index))));
+            out->setIndex(index, (void*)(&output));
+        },
+        a, out);
+}
+
+void relu(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out) {
+    _assert_equal_sizes(a, out);
+    _assert_equal_dtypes(a, out);
+
+    kernel::_element_wise(
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t index) {
+            float output = a->getIndex<float>(index);
+            output = output > 0 ? output : 0;
+            out->setIndex(index, (void*)(&output));
         },
         a, out);
 }
@@ -185,6 +222,58 @@ void transpose(std::shared_ptr<Buffer> a, const std::vector<int>& shape_a, std::
 
                 float value = a->getIndex<float>(input_index);
                 out->setIndex(output_index, (void*)(&value));
+            }
+        }
+    }
+}
+
+void matmul(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out,
+            const std::vector<int>& shape_a, const std::vector<int>& shape_b, const std::vector<int>& shape_out) {
+    int n = shape_a.size();
+    int m = shape_b.size();
+    int p = shape_out.size();
+
+    if (shape_a[n - 1] != shape_b[m - 2] || shape_a[n - 2] != shape_out[p - 2] || shape_b[m - 1] != shape_out[p - 1] ||
+        n != m || n != p) {
+        std::cerr << strings::error("buffer_ops::matmul error: ") << "incompatible input/output shapes, got "
+                  << strings::info(strings::vecToString(shape_a)) << ", "
+                  << strings::info(strings::vecToString(shape_b)) << " and "
+                  << strings::info(strings::vecToString(shape_out)) << std::endl;
+        exit(-1);
+    }
+
+    size_t matrix_count = 1;
+    for (int i = 0; i < shape_a.size() - 2; i++) {
+        matrix_count *= shape_a[i];
+
+        if (shape_a[i] != shape_out[i]) {
+            std::cerr << strings::error("buffer_ops::matmul error: ") << "incompatible input/output batch shapes, got "
+                      << strings::info(strings::vecToString(shape_a)) << ", "
+                      << strings::info(strings::vecToString(shape_b)) << " and "
+                      << strings::info(strings::vecToString(shape_out)) << std::endl;
+            exit(-1);
+        }
+    }
+
+    size_t matrix_size_a = shape_a[n - 2] * shape_a[n - 1];
+    size_t matrix_size_b = shape_b[m - 2] * shape_b[m - 1];
+    size_t matrix_size_out = shape_out[p - 2] * shape_out[p - 1];
+
+    for (size_t i = 0; i < matrix_count; i++) {
+        for (int ar = 0; ar < shape_a[n - 2]; ar++) {
+            for (int bc = 0; bc < shape_b[m - 1]; bc++) {
+                float dot = 0;
+                for (int ac = 0; ac < shape_a[n - 1]; ac++) {
+                    // dot += a[ar][ac] * b[ac][bc]
+                    size_t a_index = (i * matrix_size_a) + (ar * shape_a[n - 1]) + ac;
+                    size_t b_index = (i * matrix_size_b) + (ac * shape_b[m - 1]) + bc;
+
+                    dot += a->getIndex<float>(a_index) * b->getIndex<float>(b_index);
+                }
+
+                // out[ar][bc] = dot
+                size_t out_index = (i * matrix_size_out) + (ar * shape_out[p - 1]) + bc;
+                out->setIndex(out_index, (void*)(&dot));
             }
         }
     }

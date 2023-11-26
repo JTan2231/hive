@@ -173,8 +173,10 @@ void matmulAllocate(std::shared_ptr<Node> node) {
     new_shape[n - 1] = shape_b[n - 1];
 
     if (shape_a[n - 1] != shape_b[n - 2]) {
-        std::cerr << "allocation::allocateMatmulNode error: incompatible shapes for matrix multiplication. Got "
-                  << strings::vecToString(shape_a) << " and " << strings::vecToString(shape_b) << std::endl;
+        std::cerr << strings::error("allocation::matmulAllocate error: ")
+                  << "incompatible shapes for matrix multiplication. Got "
+                  << strings::info(strings::vecToString(shape_a)) << " and "
+                  << strings::info(strings::vecToString(shape_b)) << std::endl;
         exit(-1);
     }
 

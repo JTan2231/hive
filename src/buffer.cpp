@@ -13,6 +13,10 @@ Buffer::Buffer(size_t size, DTYPE dtype) : size_(size), dtype_(dtype) {
     memset(data_, 0, size * dtypes::dtypeSize(dtype));
 }
 
+Buffer::~Buffer() {
+    free(data_);
+}
+
 size_t Buffer::size() {
     return size_;
 }

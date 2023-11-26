@@ -17,6 +17,7 @@ class Buffer {
 
    public:
     Buffer(size_t size, DTYPE dtype);
+    ~Buffer();
 
     size_t size();
     DTYPE dtype();
