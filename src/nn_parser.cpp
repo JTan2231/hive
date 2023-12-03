@@ -301,7 +301,7 @@ std::string NNParser::strip(const std::string& s) {
 
 void NNParser::incrementCursor() {
     cursor_++;
-    inBounds();  // safety check
+    inBoundsNoError();  // safety check
 
     if (DEBUG == 2) {
         std::cout << "cursor incremented to " << cursor_ << std::endl;
@@ -401,8 +401,6 @@ std::string NNParser::registerVariableDefinition(std::shared_ptr<Graph> graph, s
         }
     }
 
-    std::cout << strings::error("registered op name ") << strings::info(op_name) << std::endl;
-
     if (variable_name == "") {
         variable_name = op_name;
     }
@@ -432,18 +430,35 @@ std::string NNParser::registerVariableDefinition(std::shared_ptr<Graph> graph, s
                     arg_buffer = "";
                 } else if (OperationRegistry::valid(arg_buffer) ||
                            registered_functions_.find(arg_buffer) != registered_functions_.end()) {
+                    if (op_name == operations::input) {
+                        std::cerr << strings::error("NNParser::registerVariableDefinition error: ")
+                                  << "input name cannot be registered variable, got " << strings::info(arg_buffer)
+                                  << std::endl;
+                        exit(-1);
+                    }
+
                     // this arg is the result of an operation
                     // get the result and attach it here
                     arg_buffer = registerVariableDefinition(graph, arg_buffer, contents, true);
                     args.push_back(arg_buffer);
                     arg_buffer = "";
                 } else if (registered_variables_.find(arg_buffer) != registered_variables_.end()) {
+                    if (op_name == operations::input) {
+                        std::cerr << strings::error("NNParser::registerVariableDefinition error: ")
+                                  << "input name cannot be registered variable, got " << strings::info(arg_buffer)
+                                  << std::endl;
+                        exit(-1);
+                    }
+
                     // ???
                     // link the variable here
                     args.push_back(arg_buffer);
                     arg_buffer = "";
+                } else if (op_name == operations::input) {
+                    args.push_back(arg_buffer);
+                    arg_buffer = "";
                 } else {
-                    std::cerr << strings::error("NNParser:registerVariableDefinition error: ")
+                    std::cerr << strings::error("NNParser::registerVariableDefinition error: ")
                               << "expected expression, variable, or value " << std::endl;
 
                     showCursor(contents);

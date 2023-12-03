@@ -118,9 +118,12 @@ std::vector<std::string> CSVDataset::parseCSVRow(const std::string& row) {
 
 // TODO: please cache these values at some point
 //       there's no need to reparse every time a data point is sampled
-std::pair<std::vector<float>, std::vector<float>> CSVDataset::sample() {
-    std::vector<float> input_values;
-    std::vector<float> output_values;
+//
+// i hate this type signature
+//
+// TODO: this, like so many other things in the repo, needs to be updated to handle batches
+std::unordered_map<std::string, std::vector<float>> CSVDataset::sample() {
+    std::unordered_map<std::string, std::vector<float>> values;
 
     int row_index = generation::randomInt(0, (int)(rows_.size()));
     std::vector<std::string> row = parseCSVRow(rows_[row_index]);
@@ -128,7 +131,7 @@ std::pair<std::vector<float>, std::vector<float>> CSVDataset::sample() {
     for (int i : input_cols_) {
         const std::string& s = row[i];
         if (strings::isNumber(s)) {
-            input_values.push_back(std::stof(s));
+            values[cols_[i]] = {std::stof(s)};
         } else {
             std::cerr << strings::error("CSVDataset::sample error: ") << "values must be unformatted numbers, got "
                       << strings::info(s) << std::endl;
@@ -139,7 +142,7 @@ std::pair<std::vector<float>, std::vector<float>> CSVDataset::sample() {
     for (int i : output_cols_) {
         const std::string& s = row[i];
         if (strings::isNumber(s)) {
-            output_values.push_back(std::stof(s));
+            values[cols_[i]] = {std::stof(s)};
         } else {
             std::cerr << strings::error("CSVDataset::sample error: ") << "values must be unformatted numbers, got "
                       << strings::info(s) << std::endl;
@@ -147,7 +150,7 @@ std::pair<std::vector<float>, std::vector<float>> CSVDataset::sample() {
         }
     }
 
-    return {input_values, output_values};
+    return values;
 }
 
 void CSVDataset::printRows() {

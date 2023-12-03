@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -21,7 +22,7 @@ class CSVDataset {
     CSVDataset(const std::string& filepath, const std::vector<std::string>& inputs,
                const std::vector<std::string>& outputs);
 
-    std::pair<std::vector<float>, std::vector<float>> sample();
+    std::unordered_map<std::string, std::vector<float>> sample();
 
     void printRows();
 

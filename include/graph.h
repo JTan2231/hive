@@ -105,6 +105,8 @@ class Graph {
 
     void evaluate();
 
+    void evaluate(std::unordered_map<std::string, std::vector<float>> inputs);
+
     void allocate();
 
     void print();

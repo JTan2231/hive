@@ -51,30 +51,30 @@ std::string _node_format(float x) {
 // these two print functions can probably be abstracted
 
 void Node::printOutput() {
-    std::vector<int> indices(shape_.size(), 0);
-    std::vector<int> end;
-    for (int i : shape_) {
-        end.push_back(i - 1);
+    if (shape_.size() > 2) {
+        std::cerr << strings::error("Node::printOutput error: ")
+                  << "this function hasn't yet been adjusted for dimension sizes > 2!" << std::endl;
+        exit(-1);
+    }
+
+    if (shape_.empty()) {
+        return;
     }
 
     std::cout << "    ";
-    while (indices != end) {
-        int i = indices.size() - 1;
-        for (int i = indices.size() - 1; i > 0 && indices[i] > end[i]; i--) {
-            indices[i] = 0;
-            indices[i - 1]++;
-
-            std::cout << std::endl << "    ";
+    for (int r = 0; r < shape_[0]; r++) {
+        if (shape_.size() == 2) {
+            for (int c = 0; c < shape_[1]; c++) {
+                std::string output = _node_format(output_->getIndex<float>(calculateIndex({r, c}, shape_)));
+                std::cout << strings::debug(output + ", ");
+            }
+        } else {
+            std::string output = _node_format(output_->getIndex<float>(calculateIndex({r}, shape_)));
+            std::cout << strings::debug(output + ", ");
         }
-
-        std::string output = _node_format(output_->getIndex<float>(calculateIndex(indices, shape_)));
-
-        std::cout << strings::debug(output + ", ");
-
-        indices[indices.size() - 1]++;
     }
 
-    std::cout << strings::debug(_node_format(output_->getIndex<float>(calculateIndex(end, shape_)))) << std::endl;
+    std::cout << std::endl;
 }
 
 void Node::printGradient() {
@@ -407,6 +407,26 @@ void Graph::evaluate() {
     if (inputs_.size() > 0) {
         std::cerr << strings::error("Graph::evaluate error: ") << "missing values for inputs" << std::endl;
         exit(-1);
+    }
+
+    topologicalSort(kernel::computeNode);
+}
+
+// TODO: this will need adjusted for batches
+//       the input loading here ONLY accounts for 1-D values
+//       no tensors or batched values yet
+void Graph::evaluate(std::unordered_map<std::string, std::vector<float>> inputs) {
+    for (auto& [name, value] : inputs) {
+        if (inputs_.find(name) == inputs_.end()) {
+            std::cerr << strings::error("Graph::evaluate error: ") << "input " << strings::info(name)
+                      << " not found in Graph" << std::endl;
+            exit(-1);
+        }
+
+        std::shared_ptr<Node> input_node = inputs_[name];
+        for (int i = 0; i < value.size(); i++) {
+            input_node->output_->setIndex(i, (void*)(&value[i]));
+        }
     }
 
     topologicalSort(kernel::computeNode);
