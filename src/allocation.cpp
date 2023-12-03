@@ -35,13 +35,26 @@ void _input_validator(size_t expected, size_t received, const std::string& opera
     }
 }
 
-// this doesn't actually allocate anything, but the connections are made between the relevant properties
+// TODO: can this be reused between functions and network inputs?
 void inputAllocate(std::shared_ptr<Node> node) {
-    std::shared_ptr<Node> input_node = node->children_.begin()->second;
+    // is this an input to a function?
+    // this doesn't actually allocate anything, but the connections are made between the relevant properties
+    if (node->children_.size() > 0) {
+        std::shared_ptr<Node> input_node = node->children_.begin()->second;
 
-    node->shape_ = input_node->shape_;
-    node->output_ = input_node->output_;
-    node->gradient_ = input_node->gradient_;
+        node->shape_ = input_node->shape_;
+        node->output_ = input_node->output_;
+        node->gradient_ = input_node->gradient_;
+    } else {
+        // otherwise this needs allocated space
+        size_t size = 1;
+        for (int i : node->shape_) {
+            size *= i;
+        }
+
+        node->output_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
+        // NOTE: leaving `gradient_` unallocated -- will this be an issue?
+    }
 }
 
 // these functions allocate buffers for their given nodes

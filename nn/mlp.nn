@@ -1,0 +1,12 @@
+let head = normal(1, 64)
+let hidden = normal(64, 32)
+let out = normal(32, 1)
+
+let t = input("t")
+let label = input("sine_value")
+
+let x = matmul(x, head)
+x = matmul(x, hidden)
+x = matmul(x, out)
+
+let loss = mse(x, label)

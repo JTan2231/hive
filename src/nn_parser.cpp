@@ -301,7 +301,7 @@ std::string NNParser::strip(const std::string& s) {
 
 void NNParser::incrementCursor() {
     cursor_++;
-    inBoundsNoError();  // safety check
+    inBounds();  // safety check
 
     if (DEBUG == 2) {
         std::cout << "cursor incremented to " << cursor_ << std::endl;
@@ -311,7 +311,7 @@ void NNParser::incrementCursor() {
 bool NNParser::inBounds() {
     bool in = cursor_ < content_size_;
     if (!in) {
-        std::cerr << "parsing error: cursor out of bounds" << std::endl;
+        std::cerr << strings::error("parsing error: ") << "cursor out of bounds" << std::endl;
 
         exit(-1);
     }
@@ -400,6 +400,8 @@ std::string NNParser::registerVariableDefinition(std::shared_ptr<Graph> graph, s
             incrementCursor();
         }
     }
+
+    std::cout << strings::error("registered op name ") << strings::info(op_name) << std::endl;
 
     if (variable_name == "") {
         variable_name = op_name;

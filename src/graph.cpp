@@ -23,7 +23,7 @@
 // TODO: there NEEDS to be some sort of differentiator between differentiable variables and constant numbers
 //       this is probably a language problem. new keyword? const vs var?
 
-Node::Node(int id) : id_(id) {
+Node::Node(int id) : id_(id), external_input(false) {
 }
 
 Node::Node(std::shared_ptr<Node> node)
@@ -185,39 +185,76 @@ std::shared_ptr<Node> Graph::_create_variable(const std::string& name, const std
 
     variable_map_[new_node->name_] = new_node;
 
-    for (int i = 0; i < arguments.size(); i++) {
-        const std::string& arg = arguments[i];
+    // input nodes require a name (string) and a shape
+    // formatted like:
+    //   - let inp = input("my input", 256, 256, 3)
+    // where:
+    //   - name == "my input"
+    //   - shape = (256, 256, 3)
+    if (operation_type == operations::input) {
+        if (arguments.size() < 2) {
+            std::cerr << strings::error("Graph::_create_variable error: ") << "inputs require a shape and a name, e.g. "
+                      << strings::debug("let x = input(\"my input name\", 1, 2, 4, 8) ") << "has shape "
+                      << strings::info("(1, 2, 4, 8)") << std::endl;
+            exit(-1);
+        }
 
-        // TODO: will constant args always mean it's a tensor op?
-        // TODO: this alias map nonsense is a headache
-        if (strings::isNumeric(arg)) {
-            // create a Constant-type node
-            // set as child
-            int constant = stoi(arg);
-            if (constant_map_.find(constant) == constant_map_.end()) {
-                createConstant(constant);
+        std::string input_name = arguments[0];
+
+        for (int i = 1; i < arguments.size(); i++) {
+            if (!strings::isNumeric(arguments[i])) {
+                std::cerr << strings::error("Graph::_create_variable error: ") << "input() shape values must be numeric"
+                          << std::endl;
+                exit(-1);
             }
 
-            new_node->children_[arg] = constant_map_[constant];
-            edges_[new_node->id_].insert(constant_map_[constant]->id_);
+            new_node->shape_.push_back(std::stoi(arguments[i]));
+        }
 
-            new_node->shape_.push_back(constant);
-        } else if (variable_map_.find(alias_map_[arg]) != variable_map_.end()) {
-            // set the pre-existing variable node as a child
-            new_node->children_[alias_map_[arg]] = variable_map_[alias_map_[arg]];
-            new_node->arg_order_[i] = alias_map_[arg];
-            edges_[new_node->id_].insert(variable_map_[alias_map_[arg]]->id_);
-        } else if (variable_map_.find(arg) != variable_map_.end()) {
-            // set the pre-existing variable node as a child
-            new_node->children_[arg] = variable_map_[arg];
-            edges_[new_node->id_].insert(variable_map_[arg]->id_);
-        } else {
-            std::cerr << strings::error("Graph::createVariable error: ")
-                      << "argument " + strings::info("`" + arg + "`") +
-                             " is neither numeric constant nor existing variable"
-                      << std::endl;
+        new_node->external_input = true;
 
+        if (inputs_.find(input_name) != inputs_.end()) {
+            std::cerr << strings::error("Graph::_create_variable error: ") << "input name " << strings::info(input_name)
+                      << " already exists" << std::endl;
             exit(-1);
+        }
+
+        inputs_[input_name] = new_node;
+    } else {
+        for (int i = 0; i < arguments.size(); i++) {
+            const std::string& arg = arguments[i];
+
+            // TODO: will constant args always mean it's a tensor op?
+            // TODO: this alias map nonsense is a headache
+            if (strings::isNumeric(arg)) {
+                // create a Constant-type node
+                // set as child
+                int constant = stoi(arg);
+                if (constant_map_.find(constant) == constant_map_.end()) {
+                    createConstant(constant);
+                }
+
+                new_node->children_[arg] = constant_map_[constant];
+                edges_[new_node->id_].insert(constant_map_[constant]->id_);
+
+                new_node->shape_.push_back(constant);
+            } else if (variable_map_.find(alias_map_[arg]) != variable_map_.end()) {
+                // set the pre-existing variable node as a child
+                new_node->children_[alias_map_[arg]] = variable_map_[alias_map_[arg]];
+                new_node->arg_order_[i] = alias_map_[arg];
+                edges_[new_node->id_].insert(variable_map_[alias_map_[arg]]->id_);
+            } else if (variable_map_.find(arg) != variable_map_.end()) {
+                // set the pre-existing variable node as a child
+                new_node->children_[arg] = variable_map_[arg];
+                edges_[new_node->id_].insert(variable_map_[arg]->id_);
+            } else {
+                std::cerr << strings::error("Graph::createVariable error: ")
+                          << "argument " + strings::info("`" + arg + "`") +
+                                 " is neither numeric constant nor existing variable"
+                          << std::endl;
+
+                exit(-1);
+            }
         }
     }
 
@@ -367,6 +404,11 @@ bool Graph::isVariable(const std::string& name) {
 }
 
 void Graph::evaluate() {
+    if (inputs_.size() > 0) {
+        std::cerr << strings::error("Graph::evaluate error: ") << "missing values for inputs" << std::endl;
+        exit(-1);
+    }
+
     topologicalSort(kernel::computeNode);
 }
 

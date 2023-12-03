@@ -51,6 +51,9 @@ class Node {
     // this is only used if operation_type_ == operations::function
     std::shared_ptr<Graph> graph_;
 
+    // this is true if the node is an input to the `.nn` file; false otherwise
+    bool external_input;
+
     void printOutput();
 
     void printGradient();
@@ -121,18 +124,21 @@ class Graph {
 
     void printNodeValues();
 
+    // this is the most reliable list of nodes in the graph
+    std::map<int, std::shared_ptr<Node>> nodes_;  // id -> Node*
+
    private:
     // this isn't really used, do we need it?
     std::map<int, std::set<int>> edges_;  // id -> { neighbor_ids... } outgoing edges
-
-    // this is the most reliable list of nodes in the graph
-    std::map<int, std::shared_ptr<Node>> nodes_;  // id -> Node*
 
     std::map<int, std::shared_ptr<Node>> constant_map_;
     std::map<std::string, std::shared_ptr<Node>> variable_map_;
 
     // container for used functions in the graph
     std::vector<std::shared_ptr<Graph>> subgraphs_;
+
+    // keeping track of the input nodes without having to iterate the whole graph
+    std::map<std::string, std::shared_ptr<Node>> inputs_;
 
     std::shared_ptr<Node> _create_variable(const std::string& name, const std::string& operation_type,
                                            const std::vector<std::string>& arguments);
