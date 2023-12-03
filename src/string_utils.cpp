@@ -12,7 +12,9 @@
 
 namespace strings {
 
-bool isAlphanumeric(char c) { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_'; }
+bool isAlphanumeric(char c) {
+    return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_';
+}
 
 // misleading function name
 // punctuation counts as numeric here
@@ -22,6 +24,33 @@ bool isAlphanumeric(char c) { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z
 bool isNumeric(const std::string& s) {
     for (char c : s) {
         if (c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z') {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// this actually checks if the string is a valid number
+// does NOT take formatted numbers e.g. 1,234,567 will return false
+bool isNumber(const std::string& s) {
+    bool decimal = false;
+    bool negative = false;
+
+    for (char c : s) {
+        if (c == '.') {
+            if (decimal) {
+                return false;
+            } else {
+                decimal = true;
+            }
+        } else if (c == '-') {
+            if (negative) {
+                return false;
+            } else {
+                negative = true;
+            }
+        } else if (c < '0' || c > '9') {
             return false;
         }
     }
@@ -57,11 +86,17 @@ std::string randomString(size_t length) {
     return str;
 }
 
-std::string error(std::string s) { return "\033[31m" + s + "\033[0m"; }
+std::string error(std::string s) {
+    return "\033[31m" + s + "\033[0m";
+}
 
-std::string info(std::string s) { return "\033[34m" + s + "\033[0m"; }
+std::string info(std::string s) {
+    return "\033[34m" + s + "\033[0m";
+}
 
-std::string debug(std::string s) { return "\033[33m" + s + "\033[0m"; }
+std::string debug(std::string s) {
+    return "\033[33m" + s + "\033[0m";
+}
 
 void _error_node(const std::string& message, std::shared_ptr<Node> n) {
     std::cout << error(message) << std::endl;

@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 // abstract this class with a common parent class
@@ -20,10 +21,12 @@ class CSVDataset {
     CSVDataset(const std::string& filepath, const std::vector<std::string>& inputs,
                const std::vector<std::string>& outputs);
 
-    std::vector<float> sample();
+    std::pair<std::vector<float>, std::vector<float>> sample();
+
+    void printRows();
 
    private:
-    void read(const std::string& filepath);
+    std::vector<std::string> parseCSVRow(const std::string& row);
 
     void validateRow(const std::string& row);
 

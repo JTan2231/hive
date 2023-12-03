@@ -19,6 +19,8 @@ bool isAlphanumeric(char c);
 // but that name's ugly
 bool isNumeric(const std::string& s);
 
+bool isNumber(const std::string& s);
+
 std::string strip(const std::string& s);
 
 template <typename T>
@@ -28,6 +30,22 @@ std::string vecToString(const std::vector<T>& vec) {
 
     for (size_t i = 0; i < vec.size(); ++i) {
         oss << vec[i];
+        if (i != vec.size() - 1) {
+            oss << ", ";
+        }
+    }
+
+    oss << "]";
+    return oss.str();
+}
+
+template <typename T>
+std::string vecToString(const std::vector<std::vector<T>>& vec) {
+    std::ostringstream oss;
+    oss << "[";
+
+    for (size_t i = 0; i < vec.size(); ++i) {
+        oss << vecToString(vec[i]);
         if (i != vec.size() - 1) {
             oss << ", ";
         }

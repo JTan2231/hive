@@ -15,4 +15,12 @@ void fillNormal(std::vector<float>& output) {
     }
 }
 
+// [min, max)
+int randomInt(int min, int max) {
+    static std::mt19937 rng(std::random_device{}());
+    std::uniform_int_distribution<std::mt19937::result_type> dist(min, max - 1);
+
+    return dist(rng);
+}
+
 }  // namespace generation
