@@ -52,7 +52,9 @@ class Node {
     std::shared_ptr<Graph> graph_;
 
     // this is true if the node is an input to the `.nn` file; false otherwise
-    bool external_input;
+    bool external_input_;
+
+    bool trainable_;
 
     void printOutput();
 
@@ -88,7 +90,7 @@ class Graph {
     // NOTE: edges_ isn't being updated here
     //       is it needed as a field?
     std::string createVariable(const std::string& name, const std::string& operation_type,
-                               const std::vector<std::string>& arguments);
+                               const std::vector<std::string>& arguments, bool trainable);
 
     std::string createFunctionVariable(const std::string& name, const std::vector<std::string>& arguments,
                                        const std::shared_ptr<Graph> graph);
@@ -143,7 +145,7 @@ class Graph {
     std::map<std::string, std::shared_ptr<Node>> inputs_;
 
     std::shared_ptr<Node> _create_variable(const std::string& name, const std::string& operation_type,
-                                           const std::vector<std::string>& arguments);
+                                           const std::vector<std::string>& arguments, bool trainable);
 
     // this is for when a variable is reassigned
     // e.g. let A = tensor(1, 2)

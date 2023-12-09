@@ -23,7 +23,7 @@
 // TODO: there NEEDS to be some sort of differentiator between differentiable variables and constant numbers
 //       this is probably a language problem. new keyword? const vs var?
 
-Node::Node(int id) : id_(id), external_input(false) {
+Node::Node(int id) : id_(id), external_input_(false), trainable_(false) {
 }
 
 Node::Node(std::shared_ptr<Node> node)
@@ -31,7 +31,8 @@ Node::Node(std::shared_ptr<Node> node)
       operation_type_(node->operation_type_),
       name_(node->name_),
       arg_order_(node->arg_order_),
-      shape_(node->shape_) {
+      shape_(node->shape_),
+      trainable_(node->trainable_) {
 }
 
 int Node::getId() {
@@ -172,12 +173,13 @@ void Graph::newEdge(int from, int to) {
 }
 
 std::shared_ptr<Node> Graph::_create_variable(const std::string& name, const std::string& operation_type,
-                                              const std::vector<std::string>& arguments) {
+                                              const std::vector<std::string>& arguments, bool trainable) {
     std::shared_ptr<Node> new_node = newNode();
 
     new_node->name_ = name;
     new_node->operation_type_ = operation_type;
     new_node->arg_order_ = arguments;
+    new_node->trainable_ = trainable;
 
     while (new_node->name_.size() == 0 || variable_map_.find(new_node->name_) != variable_map_.end()) {
         new_node->name_ = name + "_" + strings::randomString(5);
@@ -211,7 +213,7 @@ std::shared_ptr<Node> Graph::_create_variable(const std::string& name, const std
             new_node->shape_.push_back(std::stoi(arguments[i]));
         }
 
-        new_node->external_input = true;
+        new_node->external_input_ = true;
 
         if (inputs_.find(input_name) != inputs_.end()) {
             std::cerr << strings::error("Graph::_create_variable error: ") << "input name " << strings::info(input_name)
@@ -272,8 +274,8 @@ std::shared_ptr<Node> Graph::_create_variable(const std::string& name, const std
 // NOTE: edges_ isn't being updated here
 //       is it needed as a field?
 std::string Graph::createVariable(const std::string& name, const std::string& operation_type,
-                                  const std::vector<std::string>& arguments) {
-    std::shared_ptr<Node> new_node = _create_variable(name, operation_type, arguments);
+                                  const std::vector<std::string>& arguments, bool trainable) {
+    std::shared_ptr<Node> new_node = _create_variable(name, operation_type, arguments, trainable);
 
     return new_node->name_;
 }

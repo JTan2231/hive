@@ -99,7 +99,7 @@ class NNParser {
     std::string registerVariableName(const std::string& contents);
 
     std::string registerVariableDefinition(std::shared_ptr<Graph> graph, std::string variable_name,
-                                           const std::string& contents, bool is_arg);
+                                           const std::string& contents, bool is_arg, bool trainable);
 
     std::string registerFunctionName(const std::string& contents);
 
@@ -114,7 +114,8 @@ class NNParser {
     // for debugging
     std::vector<std::string> lines_;
 
-    const std::string variable_declarator_ = "let";
+    const std::string constant_declarator_ = "let";
+    const std::string variable_declarator_ = "var";
     const std::string function_declarator_ = "function";
 
     const std::set<std::string> keywords = {variable_declarator_, function_declarator_};
