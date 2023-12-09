@@ -22,7 +22,7 @@ class CSVDataset {
     CSVDataset(const std::string& filepath, const std::vector<std::string>& inputs,
                const std::vector<std::string>& outputs);
 
-    std::unordered_map<std::string, std::vector<float>> sample();
+    std::unordered_map<std::string, std::vector<float>> sample(int batch_size);
 
     void printRows();
 

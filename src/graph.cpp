@@ -15,6 +15,7 @@
 
 #include "allocation.h"
 #include "buffer.h"
+#include "buffer_ops.h"
 #include "grad.h"
 #include "kernel.h"
 #include "ops.h"
@@ -79,36 +80,37 @@ void Node::printOutput() {
 }
 
 void Node::printGradient() {
-    std::vector<int> indices(shape_.size(), 0);
-    std::vector<int> end;
-    for (int i : shape_) {
-        end.push_back(i - 1);
+    if (shape_.size() > 2) {
+        std::cerr << strings::error("Node::printOutput error: ")
+                  << "this function hasn't yet been adjusted for dimension sizes > 2!" << std::endl;
+        exit(-1);
+    }
+
+    if (shape_.empty()) {
+        return;
     }
 
     std::cout << "    ";
-    while (indices != end) {
-        int i = indices.size() - 1;
-        for (int i = indices.size() - 1; i > 0 && indices[i] > end[i]; i--) {
-            indices[i] = 0;
-            indices[i - 1]++;
-
-            std::cout << std::endl << "    ";
+    for (int r = 0; r < shape_[0]; r++) {
+        if (shape_.size() == 2) {
+            for (int c = 0; c < shape_[1]; c++) {
+                std::string output = _node_format(gradient_->getIndex<float>(calculateIndex({r, c}, shape_)));
+                std::cout << strings::debug(output + ", ");
+            }
+        } else {
+            std::string output = _node_format(gradient_->getIndex<float>(calculateIndex({r}, shape_)));
+            std::cout << strings::debug(output + ", ");
         }
-
-        std::string output = _node_format(gradient_->getIndex<float>(calculateIndex(indices, shape_)));
-
-        std::cout << strings::debug(output + ", ");
-
-        indices[indices.size() - 1]++;
     }
 
-    std::cout << strings::debug(_node_format(gradient_->getIndex<float>(calculateIndex(end, shape_)))) << std::endl;
+    std::cout << std::endl;
 }
 
 void Node::printNode() {
     std::cout << strings::debug("Node " + std::to_string(id_) + ":") << std::endl;
     std::cout << strings::debug("- Name: ") << strings::info(name_) << std::endl;
     std::cout << strings::debug("- Shape: ") << strings::info(strings::vecToString(shape_)) << std::endl;
+    std::cout << strings::debug("- Trainable: ") << strings::info(trainable_ ? "true" : "false") << std::endl;
     std::cout << strings::debug("- Children: ") << std::endl;
     for (auto& [name, child] : children_) {
         std::cout << strings::debug("  - ") << strings::info(name) << std::endl;
@@ -447,9 +449,7 @@ void Graph::print() {
 }
 
 // bfs to propagate the gradient calculation down from the head
-std::unordered_map<std::string, std::shared_ptr<Node>> Graph::gradient() {
-    std::unordered_map<std::string, std::shared_ptr<Node>> out;
-
+void Graph::calculateGradient() {
     std::queue<std::shared_ptr<Node>> q;
     q.push(getHead());
 
@@ -464,12 +464,26 @@ std::unordered_map<std::string, std::shared_ptr<Node>> Graph::gradient() {
             q.push(child);
         }
     }
+}
 
+std::unordered_map<std::string, std::shared_ptr<Node>> Graph::getGradient() {
+    std::unordered_map<std::string, std::shared_ptr<Node>> gradient;
     for (auto& [id, node] : nodes_) {
-        out[node->name_] = node;
+        if (node->trainable_) {
+            gradient[node->name_] = node;
+        }
     }
 
-    return out;
+    return gradient;
+}
+
+// naive SGD for now
+// TODO: where's Adam?
+void Graph::applyGradients() {
+    for (auto& [id, node] : nodes_) {
+        buffer_ops::multiply(node->gradient_, learning_rate_, node->gradient_);
+        buffer_ops::subtract(node->output_, node->gradient_, node->output_);
+    }
 }
 
 // topological sort

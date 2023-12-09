@@ -53,7 +53,9 @@ void inputAllocate(std::shared_ptr<Node> node) {
         }
 
         node->output_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
-        // NOTE: leaving `gradient_` unallocated -- will this be an issue?
+
+        // what do we do with the gradient here
+        node->gradient_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
     }
 }
 

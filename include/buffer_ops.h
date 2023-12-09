@@ -21,6 +21,8 @@ void divide(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_pt
 void add(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out);
 void add(std::shared_ptr<Buffer> a, float b, std::shared_ptr<Buffer> out);
 
+void subtract(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out);
+
 void reciprocal(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out);
 
 void ln(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out);

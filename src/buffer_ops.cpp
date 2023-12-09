@@ -106,6 +106,18 @@ void add(std::shared_ptr<Buffer> a, float b, std::shared_ptr<Buffer> out) {
         a, b, out);
 }
 
+void subtract(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out) {
+    _assert_equal_sizes(a, b, out);
+    _assert_equal_dtypes(a, b, out);
+
+    kernel::_element_wise(
+        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _b, std::shared_ptr<Buffer> _out, size_t index) {
+            float output = _a->getIndex<float>(index) - _b->getIndex<float>(index);
+            _out->setIndex(index, (void*)(&output));
+        },
+        a, b, out);
+}
+
 void reciprocal(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out) {
     _assert_equal_sizes(a, out);
     _assert_equal_dtypes(a, out);

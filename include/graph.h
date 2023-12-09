@@ -113,8 +113,13 @@ class Graph {
 
     void print();
 
+    void calculateGradient();
+
     // retrieve a map of the gradient of the head wrt every node in the graph
-    std::unordered_map<std::string, std::shared_ptr<Node>> gradient();
+    std::unordered_map<std::string, std::shared_ptr<Node>> getGradient();
+
+    // Graph::calculateGradient MUST be called before this to have any effect
+    void applyGradients();
 
     // topological sort for evaluate and allocate
     void topologicalSort(std::function<void(std::shared_ptr<Node>)> visit_function);
@@ -153,6 +158,8 @@ class Graph {
     std::map<std::string, std::string> alias_map_;
 
     int node_index_ = 0;
+
+    float learning_rate_ = 0.01;
 };
 
 #endif

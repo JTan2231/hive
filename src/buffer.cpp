@@ -8,6 +8,8 @@
 #include "dtypes.h"
 #include "string_utils.h"
 
+// TODO: please god define an iterator for this
+
 Buffer::Buffer(size_t size, DTYPE dtype) : size_(size), dtype_(dtype) {
     data_ = malloc(size * dtypes::dtypeSize(dtype));
     memset(data_, 0, size * dtypes::dtypeSize(dtype));

@@ -56,39 +56,42 @@ void _element_wise(
 // naive implementation
 // TODO: make it not naive
 // TODO: broadcasting
-// TODO [WARNING]: this DOES NOT handle tensors of rank > 2
-//                 need to update this asap
 void matmul(std::shared_ptr<Node> node) {
     std::shared_ptr<Node> left_node = node->children_[node->arg_order_[0]];
     std::shared_ptr<Node> right_node = node->children_[node->arg_order_[1]];
 
     int l = left_node->shape_.size();
     int r = right_node->shape_.size();
+    int o = node->shape_.size();
 
-    std::vector<int> l_index(l, 0);
-    std::vector<int> r_index(r, 0);
-    std::vector<int> out_index(l, 0);
+    size_t l_matrix_size = left_node->shape_[l - 2] * left_node->shape_[l - 1];
+    size_t r_matrix_size = right_node->shape_[r - 2] * right_node->shape_[r - 1];
+    size_t o_matrix_size = node->shape_[o - 2] * node->shape_[o - 1];
 
-    for (int i = 0; i < left_node->shape_[l - 2]; i++) {
-        for (int j = 0; j < right_node->shape_[r - 1]; j++) {
-            float dot = 0;
-            for (int k = 0; k < right_node->shape_[r - 2]; k++) {
-                l_index[l - 2] = i;
-                l_index[l - 1] = k;
+    // for batched matrix multiplication, only the last two dimensions are considered in the multipliciation
+    // the rest of the dimenions just served to act as groupings of matrices
+    //
+    // NOTE: shape verification if performed in `allocation.cpp`
+    size_t matrix_count = 1;
+    for (int i = 0; i < left_node->shape_.size() - 2; i++) {
+        matrix_count *= left_node->shape_[i];
+    }
 
-                r_index[r - 2] = k;
-                r_index[r - 1] = j;
+    for (int m = 0; m < matrix_count; m++) {
+        for (int i = 0; i < left_node->shape_[l - 2]; i++) {
+            for (int j = 0; j < right_node->shape_[r - 1]; j++) {
+                float dot = 0;
+                for (int k = 0; k < right_node->shape_[r - 2]; k++) {
+                    float a =
+                        left_node->output_->getIndex<float>((i * l_matrix_size) + (i * left_node->shape_[l - 1]) + k);
+                    float b =
+                        right_node->output_->getIndex<float>((i * r_matrix_size) + (k * right_node->shape_[r - 1]) + j);
 
-                float a = left_node->output_->getIndex<float>(calculateIndex(l_index, left_node->shape_));
-                float b = right_node->output_->getIndex<float>(calculateIndex(r_index, right_node->shape_));
+                    dot += a * b;
+                }
 
-                dot += a * b;
+                node->output_->setIndex((i * o_matrix_size) + (i * node->shape_[o - 2]) + j, (void*)(&dot));
             }
-
-            out_index[l - 2] = i;
-            out_index[l - 1] = j;
-
-            node->output_->setIndex(calculateIndex(out_index, node->shape_), (void*)(&dot));
         }
     }
 }
