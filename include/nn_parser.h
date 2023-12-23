@@ -16,7 +16,7 @@
 #include "ops.h"
 
 // this should probably be moved
-#define DEBUG 0
+#define DEBUGGING 0
 
 namespace nn_parser {
 

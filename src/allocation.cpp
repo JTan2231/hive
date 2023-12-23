@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 
+#include "broadcasting.h"
 #include "buffer.h"
 #include "generation_utils.h"
 #include "graph.h"
@@ -24,8 +25,26 @@ void printVec(const std::string& name, std::vector<T> v) {
 // is this also where validation will be taking place?
 namespace allocation {
 
-// TODO: shapes need figured out to a cleaner solution
 // TODO: input argument count validation
+
+void allocateNode(std::shared_ptr<Node> node) {
+    const auto& allocationMap = OperationRegistry::GetAllocationMap();
+
+    auto it = allocationMap.find(node->operation_type_);
+    if (it != allocationMap.end()) {
+        std::cout << strings::debug("ALLOCATING NODE ") << strings::info(node->name_) << strings::debug(" OF TYPE ")
+                  << strings::info(node->operation_type_) << std::endl;
+        it->second(node);
+        std::cout << strings::vecToString(node->shape_) << ", " << strings::vecToString(node->output_->shape()) << ", "
+                  << node->output_->size() << std::endl;
+        std::cout << strings::debug("FINISHED ALLOCATING NODE ") << strings::info(node->name_)
+                  << strings::debug(" OF TYPE ") << strings::info(node->operation_type_) << std::endl;
+    } else {
+        std::cerr << strings::error("allocation::allocateNode error: ") << "unrecognized node operation type "
+                  << strings::info("`" + node->operation_type_ + "`") << std::endl;
+        exit(-1);
+    }
+}
 
 void _input_validator(size_t expected, size_t received, const std::string& operation) {
     if (expected != received) {
@@ -47,15 +66,10 @@ void inputAllocate(std::shared_ptr<Node> node) {
         node->gradient_ = input_node->gradient_;
     } else {
         // otherwise this needs allocated space
-        size_t size = 1;
-        for (int i : node->shape_) {
-            size *= i;
-        }
-
-        node->output_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
+        node->output_ = std::shared_ptr<Buffer>(new Buffer(node->shape_, DTYPE::float32));
 
         // what do we do with the gradient here
-        node->gradient_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
+        node->gradient_ = std::shared_ptr<Buffer>(new Buffer(node->shape_, DTYPE::float32));
     }
 }
 
@@ -70,8 +84,8 @@ void tensorAllocate(std::shared_ptr<Node> node) {
         shape.push_back(dim);
     }
 
-    node->output_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
-    node->gradient_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
+    node->output_ = std::shared_ptr<Buffer>(new Buffer(node->shape_, DTYPE::float32));
+    node->gradient_ = std::shared_ptr<Buffer>(new Buffer(node->shape_, DTYPE::float32));
     const float one = 1;
     for (size_t i = 0; i < node->gradient_->size(); i++) {
         node->gradient_->setIndex(i, (void*)(&one));
@@ -85,16 +99,41 @@ void tensorAllocate(std::shared_ptr<Node> node) {
 // this function is for allocating binary nodes that don't change shape as a result of their operation
 // e.g. pemdas, pow, etc.
 void _element_wise_allocate(std::shared_ptr<Node> node) {
-    node->output_ =
-        std::shared_ptr<Buffer>(new Buffer(node->children_[node->arg_order_[0]]->output_->size(), DTYPE::float32));
-    node->gradient_ =
-        std::shared_ptr<Buffer>(new Buffer(node->children_[node->arg_order_[0]]->output_->size(), DTYPE::float32));
+    int largest_shape = 0;
+    for (auto& [name, child] : node->children_) {
+        largest_shape = std::max(largest_shape, (int)(child->shape_.size()));
+    }
+
+    std::vector<int> node_shape(largest_shape);
+    std::vector<int> output_shape(largest_shape);
+    std::vector<int> gradient_shape(largest_shape);
+
+    std::vector<int> padded;
+    for (auto& [name, child] : node->children_) {
+        padded = broadcasting::padVector(child->shape_, largest_shape);
+        for (int i = 0; i < largest_shape; i++) {
+            node_shape[i] = std::max(node_shape[i], padded[i]);
+        }
+
+        padded = broadcasting::padVector(child->output_->shape_, largest_shape);
+        for (int i = 0; i < largest_shape; i++) {
+            output_shape[i] = std::max(output_shape[i], padded[i]);
+        }
+
+        padded = broadcasting::padVector(child->gradient_->shape_, largest_shape);
+        for (int i = 0; i < largest_shape; i++) {
+            gradient_shape[i] = std::max(gradient_shape[i], padded[i]);
+        }
+    }
+
+    node->output_ = std::shared_ptr<Buffer>(new Buffer(output_shape, DTYPE::float32));
+    node->gradient_ = std::shared_ptr<Buffer>(new Buffer(gradient_shape, DTYPE::float32));
     const float one = 1;
     for (size_t i = 0; i < node->gradient_->size(); i++) {
         node->gradient_->setIndex(i, (void*)(&one));
     }
 
-    node->shape_ = node->children_[node->arg_order_[0]]->shape_;
+    node->shape_ = node_shape;
 }
 
 void addAllocate(std::shared_ptr<Node> node) {
@@ -148,22 +187,25 @@ void matmulAllocate(std::shared_ptr<Node> node) {
     shape_a = node->children_[node->arg_order_[0]]->shape_;
     shape_b = node->children_[node->arg_order_[1]]->shape_;
 
-    if (shape_a.size() != shape_b.size()) {
-        std::cerr << strings::error("allocation::matmulAllocateError: ")
-                  << "argument shapes must be equal in size. Got " << strings::vecToString(shape_a) << " and "
-                  << strings::vecToString(shape_b) << std::endl;
-        exit(-1);
+    if (shape_a.size() < shape_b.size()) {
+        std::vector<int> ones(shape_b.size() - shape_a.size(), 1);
+        shape_a.insert(shape_a.begin(), ones.begin(), ones.end());
+    } else if (shape_b.size() < shape_a.size()) {
+        std::vector<int> ones(shape_a.size() - shape_b.size(), 1);
+        shape_b.insert(shape_b.begin(), ones.begin(), ones.end());
     }
 
     int n = shape_a.size();
     for (int i = 0; i < n - 2; i++) {
-        if (shape_a[i] != shape_b[i]) {
+        if (shape_a[i] != shape_b[i] && shape_a[i] != 1 && shape_b[i] != 1) {
             std::cerr << strings::error("allocation::matmulAllocateError: ")
-                      << "shapes must be equal until the final two dimensions [N - 2, N - 1]" << std::endl;
+                      << "shapes must be equal or 1 until the final two dimensions [N - 2, N - 1], got "
+                      << strings::info(strings::vecToString(shape_a)) << " and "
+                      << strings::info(strings::vecToString(shape_b)) << std::endl;
             exit(-1);
         }
 
-        size *= shape_a[i];
+        size *= std::max(shape_a[i], shape_b[i]);
     }
 
     if (shape_a.size() < 2 || shape_b.size() < 2) {
@@ -182,7 +224,10 @@ void matmulAllocate(std::shared_ptr<Node> node) {
         exit(-1);
     }
 
-    std::vector<int> new_shape = shape_a;
+    std::vector<int> new_shape;
+    for (int i = 0; i < shape_a.size(); i++) {
+        new_shape.push_back(std::max(shape_a[i], shape_b[i]));
+    }
 
     new_shape[n - 2] = shape_a[n - 2];
     new_shape[n - 1] = shape_b[n - 1];
@@ -195,10 +240,8 @@ void matmulAllocate(std::shared_ptr<Node> node) {
         exit(-1);
     }
 
-    size *= shape_a[n - 2] * shape_b[n - 1];
-
-    node->output_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
-    node->gradient_ = std::shared_ptr<Buffer>(new Buffer(size, DTYPE::float32));
+    node->output_ = std::shared_ptr<Buffer>(new Buffer(new_shape, DTYPE::float32));
+    node->gradient_ = std::shared_ptr<Buffer>(new Buffer(new_shape, DTYPE::float32));
     const float one = 1;
     for (size_t i = 0; i < node->gradient_->size(); i++) {
         node->gradient_->setIndex(i, (void*)(&one));
@@ -211,11 +254,11 @@ void matmulAllocate(std::shared_ptr<Node> node) {
 // does gradient_ need allocated here?
 // trivial memory usage either way
 void constantAllocate(std::shared_ptr<Node> node) {
-    node->output_ = std::shared_ptr<Buffer>(new Buffer(1, DTYPE::float32));
-    node->gradient_ = std::shared_ptr<Buffer>(new Buffer(1, DTYPE::float32));
+    node->output_ = std::shared_ptr<Buffer>(new Buffer({1}, DTYPE::float32));
+    node->gradient_ = std::shared_ptr<Buffer>(new Buffer({1}, DTYPE::float32));
 
     float value = std::stof(node->name_);
-    float zero = 0;
+    float zero = 1;
 
     node->output_->setIndex(0, (void*)(&value));
     node->gradient_->setIndex(0, (void*)(&zero));
@@ -226,18 +269,12 @@ void normalAllocate(std::shared_ptr<Node> node) {
     std::shared_ptr<Buffer> buf = node->output_;
 
     if (buf->dtype() != DTYPE::float32) {
-        std::cerr << strings::error("allocation::allocateNormalNode error: ") << "buffer data type must be float32"
-                  << std::endl;
+        std::cerr << strings::error("allocation::allocateNormalNode error (TODO): ")
+                  << "buffer data type must be float32" << std::endl;
         exit(-1);
     }
 
-    // is a separate data buffer really necessary?
-    std::vector<float> data(buf->size());
-    generation::fillNormal(data);
-
-    for (size_t i = 0; i < buf->size(); i++) {
-        buf->setIndex(i, (void*)(&data[i]));
-    }
+    generation::fillNormal(buf);
 }
 
 void onesAllocate(std::shared_ptr<Node> node) {
@@ -258,17 +295,19 @@ void reluAllocate(std::shared_ptr<Node> node) {
     _element_wise_allocate(node);
 }
 
-void allocateNode(std::shared_ptr<Node> node) {
-    const auto& allocationMap = OperationRegistry::GetAllocationMap();
+void reduce_sumAllocate(std::shared_ptr<Node> node) {
+    _input_validator(1, node->arg_order_.size(), "reduce_sum");
 
-    auto it = allocationMap.find(node->operation_type_);
-    if (it != allocationMap.end()) {
-        it->second(node);
-    } else {
-        std::cerr << strings::error("allocation::allocateNode error: ") << "unrecognized node operation type "
-                  << strings::info("`" + node->operation_type_ + "`") << std::endl;
-        exit(-1);
-    }
+    node->output_ = std::shared_ptr<Buffer>(new Buffer({1}, DTYPE::float32));
+    node->gradient_ = std::shared_ptr<Buffer>(new Buffer({1}, DTYPE::float32));
+
+    float value = 0;
+    float zero = 1;
+
+    node->output_->setIndex(0, (void*)(&value));
+    node->gradient_->setIndex(0, (void*)(&zero));
+
+    node->shape_ = {1};
 }
 
 }  // namespace allocation

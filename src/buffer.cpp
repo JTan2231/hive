@@ -4,19 +4,31 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <vector>
 
 #include "dtypes.h"
 #include "string_utils.h"
 
 // TODO: please god define an iterator for this
 
-Buffer::Buffer(size_t size, DTYPE dtype) : size_(size), dtype_(dtype) {
+Buffer::Buffer(std::vector<int> shape, DTYPE dtype) : shape_(shape), dtype_(dtype) {
+    size_t size = 1;
+    for (int dim : shape) {
+        size *= dim;
+    }
+
+    size_ = size;
+
     data_ = malloc(size * dtypes::dtypeSize(dtype));
     memset(data_, 0, size * dtypes::dtypeSize(dtype));
 }
 
 Buffer::~Buffer() {
     free(data_);
+}
+
+std::vector<int> Buffer::shape() {
+    return shape_;
 }
 
 size_t Buffer::size() {
@@ -46,6 +58,12 @@ void Buffer::print() {
 // e.g. 4-D array of shape [x, y, z, w] at [i, j, k, l] means index == i * y * z * w + j * z * w + k * w + l
 // TODO: this disclaimer can probably be abstracted more easily
 void Buffer::setIndex(size_t index, void* value) {
+    if (index > size_) {
+        std::cerr << strings::error("Buffer::setIndex error: ") << "index " << strings::info(std::to_string(index))
+                  << " out of range" << std::endl;
+        exit(-1);
+    }
+
     if (dtype_ == DTYPE::float32) {
         *(dtypes::toFloat32(data_) + index) = *(dtypes::toFloat32(value));
     }

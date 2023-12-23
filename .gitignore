@@ -8,6 +8,8 @@
 .cache
 .clangd
 
+logs/
+
 # build artifacts
 compile_commands.json
 *.exe

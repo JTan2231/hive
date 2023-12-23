@@ -3,9 +3,11 @@
 
 #include <cstddef>
 #include <cstring>
+#include <iostream>
 #include <vector>
 
 #include "dtypes.h"
+#include "string_utils.h"
 
 class Buffer {
     // number of elements of type dtype_
@@ -16,10 +18,13 @@ class Buffer {
     DTYPE dtype_;
 
    public:
-    Buffer(size_t size, DTYPE dtype);
+    Buffer(std::vector<int> shape, DTYPE dtype);
     ~Buffer();
 
+    std::vector<int> shape();
+
     size_t size();
+
     DTYPE dtype();
 
     void* getData();
@@ -34,8 +39,16 @@ class Buffer {
 
     template <typename T>
     T getIndex(size_t index) {
+        if (index > size_) {
+            std::cerr << strings::error("Buffer::getIndex error: ") << "index " << strings::info(std::to_string(index))
+                      << " out of range " << strings::info(std::to_string(size_)) << std::endl;
+            exit(-1);
+        }
+
         return *(((T*)data_) + index);
     }
+
+    std::vector<int> shape_;
 };
 
 size_t calculateIndex(const std::vector<int>& indices, const std::vector<int>& shape);

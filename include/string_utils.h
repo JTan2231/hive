@@ -2,11 +2,12 @@
 #define STRING_UTILS
 
 #include <cstddef>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
 
-#include "graph.h"
+class Node;
 
 namespace strings {
 

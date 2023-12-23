@@ -17,6 +17,7 @@ void multiply(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_
 void multiply(std::shared_ptr<Buffer> a, float b, std::shared_ptr<Buffer> out);
 
 void divide(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out);
+void divide(std::shared_ptr<Buffer> a, float b, std::shared_ptr<Buffer> out);
 
 void add(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out);
 void add(std::shared_ptr<Buffer> a, float b, std::shared_ptr<Buffer> out);
@@ -39,6 +40,10 @@ void transpose(std::shared_ptr<Buffer> a, const std::vector<int>& shape_a, std::
 
 void matmul(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out,
             const std::vector<int>& shape_a, const std::vector<int>& shape_b, const std::vector<int>& shape_out);
+
+float reduceSum(std::shared_ptr<Buffer> a);
+
+void set(std::shared_ptr<Buffer> a, float value);
 
 }  // namespace buffer_ops
 

@@ -1,17 +1,22 @@
 #include "generation_utils.h"
 
+#include <cmath>
+#include <memory>
 #include <random>
 #include <vector>
 
+#include "buffer.h"
+
 namespace generation {
 
-void fillNormal(std::vector<float>& output) {
+void fillNormal(std::shared_ptr<Buffer> buffer) {
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::normal_distribution<float> dis(0, 1);
+    std::normal_distribution<float> dis(0, std::sqrt(2. / 64));
 
-    for (int i = 0; i < output.size(); i++) {
-        output[i] = dis(gen);
+    for (int i = 0; i < buffer->size(); i++) {
+        float x = dis(gen);
+        buffer->setIndex(i, (void*)(&x));
     }
 }
 

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <fstream>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -52,58 +53,114 @@ std::string _node_format(float x) {
 
 // these two print functions can probably be abstracted
 
-void Node::printOutput() {
-    if (shape_.size() > 2) {
-        std::cerr << strings::error("Node::printOutput error: ")
-                  << "this function hasn't yet been adjusted for dimension sizes > 2!" << std::endl;
-        exit(-1);
-    }
+void Node::printOutput(std::ostream& stream) {
+    if (shape_.size() < 2) {
+        for (size_t i = 0; i < output_->size(); i++) {
+            stream << output_->getIndex<float>(i) << ", ";
+        }
 
-    if (shape_.empty()) {
+        stream << std::endl;
+
         return;
     }
 
-    std::cout << "    ";
-    for (int r = 0; r < shape_[0]; r++) {
-        if (shape_.size() == 2) {
-            for (int c = 0; c < shape_[1]; c++) {
-                std::string output = _node_format(output_->getIndex<float>(calculateIndex({r, c}, shape_)));
-                std::cout << strings::debug(output + ", ");
+    std::vector<int> batch_shape;
+
+    if (shape_.size() > 2) {
+        for (int i = 0; i < shape_.size() - 2; i++) {
+            batch_shape.push_back(shape_[i]);
+        }
+    } else {
+        batch_shape = shape_;
+    }
+
+    kernel::BroadcastIterator it(batch_shape, batch_shape);
+
+    int m = shape_[shape_.size() - 2];
+    int n = shape_[shape_.size() - 1];
+
+    stream << "    ";
+    if (shape_.size() > 2) {
+        while (!it.end()) {
+            auto [_, index] = it.getIndices();
+
+            for (int r = 0; r < m; r++) {
+                for (int c = 0; c < n; c++) {
+                    std::string output = std::to_string(output_->getIndex<float>(index + (r * n) + c));
+                    stream << output << ", ";
+                }
             }
-        } else {
-            std::string output = _node_format(output_->getIndex<float>(calculateIndex({r}, shape_)));
-            std::cout << strings::debug(output + ", ");
+
+            it.increment();
+        }
+
+        stream << std::endl;
+    } else if (shape_.size() == 2) {
+        for (int r = 0; r < m; r++) {
+            for (int c = 0; c < n; c++) {
+                stream << output_->getIndex<float>(r * n + c) << ", ";
+            }
+
+            stream << std::endl;
         }
     }
 
-    std::cout << std::endl;
+    stream << std::endl;
 }
 
-void Node::printGradient() {
-    if (shape_.size() > 2) {
-        std::cerr << strings::error("Node::printOutput error: ")
-                  << "this function hasn't yet been adjusted for dimension sizes > 2!" << std::endl;
-        exit(-1);
-    }
+void Node::printGradient(std::ostream& stream) {
+    if (shape_.size() < 2) {
+        for (size_t i = 0; i < gradient_->size(); i++) {
+            stream << gradient_->getIndex<float>(i) << ", ";
+        }
 
-    if (shape_.empty()) {
+        stream << std::endl;
+
         return;
     }
 
-    std::cout << "    ";
-    for (int r = 0; r < shape_[0]; r++) {
-        if (shape_.size() == 2) {
-            for (int c = 0; c < shape_[1]; c++) {
-                std::string output = _node_format(gradient_->getIndex<float>(calculateIndex({r, c}, shape_)));
-                std::cout << strings::debug(output + ", ");
+    std::vector<int> batch_shape;
+
+    if (shape_.size() > 2) {
+        for (int i = 0; i < shape_.size() - 2; i++) {
+            batch_shape.push_back(shape_[i]);
+        }
+    } else {
+        batch_shape = shape_;
+    }
+
+    kernel::BroadcastIterator it(batch_shape, batch_shape);
+
+    int m = shape_[shape_.size() - 2];
+    int n = shape_[shape_.size() - 1];
+
+    stream << "    ";
+    if (shape_.size() > 2) {
+        while (!it.end()) {
+            auto [_, index] = it.getIndices();
+
+            for (int r = 0; r < m; r++) {
+                for (int c = 0; c < n; c++) {
+                    std::string output = std::to_string(gradient_->getIndex<float>(index + (r * n) + c));
+                    stream << output << ", ";
+                }
             }
-        } else {
-            std::string output = _node_format(gradient_->getIndex<float>(calculateIndex({r}, shape_)));
-            std::cout << strings::debug(output + ", ");
+
+            it.increment();
+        }
+
+        stream << std::endl;
+    } else if (shape_.size() == 2) {
+        for (int r = 0; r < m; r++) {
+            for (int c = 0; c < n; c++) {
+                stream << gradient_->getIndex<float>(r * n + c) << ", ";
+            }
+
+            stream << std::endl;
         }
     }
 
-    std::cout << std::endl;
+    stream << std::endl;
 }
 
 void Node::printNode() {
@@ -159,6 +216,22 @@ std::shared_ptr<Node> Graph::newNode() {
     return node;
 }
 
+std::shared_ptr<Node> Graph::getNode(const std::string& name) {
+    if (alias_map_.find(name) != alias_map_.end()) {
+        if (variable_map_.find(alias_map_[name]) != variable_map_.end()) {
+            return variable_map_[alias_map_[name]];
+        } else {
+            std::cerr << strings::error("Graph::getNode error: ") << "node " << strings::info(name) << " or "
+                      << strings::info(alias_map_[name]) << "doesn't exist" << std::endl;
+            exit(-1);
+        }
+    } else {
+        std::cerr << strings::error("Graph::getNode error: ") << "node " << strings::info(name) << "doesn't exist"
+                  << std::endl;
+        exit(-1);
+    }
+}
+
 // TODO: is there other processing we want to do here?
 void Graph::newEdge(int from, int to) {
     if (nodes_.find(from) == nodes_.end()) {
@@ -197,7 +270,8 @@ std::shared_ptr<Node> Graph::_create_variable(const std::string& name, const std
     //   - shape = (256, 256, 3)
     if (operation_type == operations::input) {
         if (arguments.size() < 2) {
-            std::cerr << strings::error("Graph::_create_variable error: ") << "inputs require a shape and a name, e.g. "
+            std::cerr << strings::error("Graph::_create_variable error: ") << "input " << strings::info(new_node->name_)
+                      << " requires a shape and a name, e.g. "
                       << strings::debug("let x = input(\"my input name\", 1, 2, 4, 8) ") << "has shape "
                       << strings::info("(1, 2, 4, 8)") << std::endl;
             exit(-1);
@@ -407,6 +481,22 @@ bool Graph::isVariable(const std::string& name) {
     return variable_map_.find(alias_map_[name]) != variable_map_.end();
 }
 
+void Graph::log(std::ofstream& log_file) {
+    for (auto& [id, node] : nodes_) {
+        log_file << node->name_ << " " << strings::vecToString(node->shape_) << std::endl;
+        node->printOutput(log_file);
+    }
+}
+
+void Graph::gradLog(std::ofstream& log_file) {
+    for (auto& [id, node] : nodes_) {
+        if (node->trainable_) {
+            log_file << node->name_ << " " << strings::vecToString(node->shape_) << std::endl;
+            node->printGradient(log_file);
+        }
+    }
+}
+
 void Graph::evaluate() {
     if (inputs_.size() > 0) {
         std::cerr << strings::error("Graph::evaluate error: ") << "missing values for inputs" << std::endl;
@@ -450,6 +540,10 @@ void Graph::print() {
 
 // bfs to propagate the gradient calculation down from the head
 void Graph::calculateGradient() {
+    inverseTopologicalSort(gradient::propagateNode);
+}
+
+void Graph::inverseTopologicalSort(std::function<void(std::shared_ptr<Node>)> visit_function) {
     std::queue<std::shared_ptr<Node>> q;
     q.push(getHead());
 
@@ -479,10 +573,14 @@ std::unordered_map<std::string, std::shared_ptr<Node>> Graph::getGradient() {
 
 // naive SGD for now
 // TODO: where's Adam?
-void Graph::applyGradients() {
+void Graph::applyGradients(int batch_size, float learning_rate) {
     for (auto& [id, node] : nodes_) {
-        buffer_ops::multiply(node->gradient_, learning_rate_, node->gradient_);
-        buffer_ops::subtract(node->output_, node->gradient_, node->output_);
+        if (node->trainable_) {
+            buffer_ops::multiply(node->gradient_, learning_rate, node->gradient_);
+            buffer_ops::divide(node->gradient_, batch_size, node->gradient_);
+            buffer_ops::subtract(node->output_, node->gradient_, node->output_);
+            buffer_ops::set(node->gradient_, 1);
+        }
     }
 }
 
@@ -584,7 +682,7 @@ void Graph::listNodes() {
 void Graph::printNodeValues() {
     for (auto& p : variable_map_) {
         std::cout << strings::info(p.first + " " + strings::vecToString(p.second->shape_) + ": ") << std::endl;
-        p.second->printOutput();
+        p.second->printOutput(std::cout);
         std::cout << std::endl;
     }
 }

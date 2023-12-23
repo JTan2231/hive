@@ -20,6 +20,12 @@ class Node;
 class Graph;
 
 // probably needs moved
+//
+// TODO: This Node class needs cleaned up
+//       the `shape_` member is being repeated in buffer
+//       it doesn't feel like there's a clear separation of concerns here
+//
+//       is Node a tensor or not? probably just need a separate Tensor class
 
 // this class feels like it's getting too fat
 class Node {
@@ -56,9 +62,9 @@ class Node {
 
     bool trainable_;
 
-    void printOutput();
+    void printOutput(std::ostream& stream);
 
-    void printGradient();
+    void printGradient(std::ostream& stream);
 
     void printNode();
 
@@ -77,6 +83,8 @@ class Graph {
     std::string getUniqueNodeName(const std::string& name);
 
     std::shared_ptr<Node> newNode();
+
+    std::shared_ptr<Node> getNode(const std::string& name);
 
     // TODO: is there other processing we want to do here?
     void newEdge(int from, int to);
@@ -115,11 +123,17 @@ class Graph {
 
     void calculateGradient();
 
+    void log(std::ofstream& log_file);
+
+    void gradLog(std::ofstream& log_file);
+
     // retrieve a map of the gradient of the head wrt every node in the graph
     std::unordered_map<std::string, std::shared_ptr<Node>> getGradient();
 
     // Graph::calculateGradient MUST be called before this to have any effect
-    void applyGradients();
+    void applyGradients(int batch_size, float learning_rate);
+
+    void inverseTopologicalSort(std::function<void(std::shared_ptr<Node>)> visit_function);
 
     // topological sort for evaluate and allocate
     void topologicalSort(std::function<void(std::shared_ptr<Node>)> visit_function);
@@ -158,8 +172,6 @@ class Graph {
     std::map<std::string, std::string> alias_map_;
 
     int node_index_ = 0;
-
-    float learning_rate_ = 0.01;
 };
 
 #endif

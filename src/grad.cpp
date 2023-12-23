@@ -12,6 +12,7 @@
 // TODO: implement the unimplemented
 // TODO: these can probably be heavily optimized
 // TODO: what do we do with the constant functions? e.g. normal, tensor, etc.
+// TODO: broadcasting needs better accounted for in grad calculations
 //
 // NOTE: in all of these, they're assumed to have the structure of
 //       f(a, b, ...) = ...
@@ -21,7 +22,10 @@
 namespace gradient {
 
 void _propagate_current_grad(std::shared_ptr<Node> node, std::shared_ptr<Node> child) {
-    buffer_ops::multiply(node->gradient_, child->gradient_, child->gradient_);
+    if (child->operation_type_ != operations::constant) {
+        // accumulation for broadcasted operations
+        buffer_ops::multiply(node->gradient_, child->gradient_, child->gradient_);
+    }
 }
 
 void propagateNode(std::shared_ptr<Node> node) {
@@ -29,7 +33,9 @@ void propagateNode(std::shared_ptr<Node> node) {
 
     auto it = gradMap.find(node->operation_type_);
     if (it != gradMap.end()) {
+        std::cout << strings::error("COMPUTING GRADIENT FOR NODE ") << strings::info(node->name_) << std::endl;
         it->second(node);
+        std::cout << strings::error("FINISHED COMPUTING GRADIENT FOR NODE ") << strings::info(node->name_) << std::endl;
     } else {
         std::cerr << strings::error("gradient::propagateNode error: ") << "unrecognized node operation type "
                   << strings::info("`" + node->operation_type_ + "`") << std::endl;
@@ -69,9 +75,12 @@ void tensorGradient(std::shared_ptr<Node> node) {
 
 // this is just 1, no action needed
 void addGradient(std::shared_ptr<Node> node) {
+    std::cout << "ENTER ADD GRADIENT" << std::endl;
     for (auto& [name, child] : node->children_) {
+        std::cout << "propagating to " << name << std::endl;
         _propagate_current_grad(node, child);
     }
+    std::cout << "EXIT ADD GRADIENT" << std::endl;
 }
 
 void subtractGradient(std::shared_ptr<Node> node) {
@@ -141,14 +150,21 @@ void powGradient(std::shared_ptr<Node> node) {
     _propagate_current_grad(node, power);
 
     // df/da
-    // this is disgusting
-    buffer_ops::pow(base->output_, power->output_, base->gradient_);
-    buffer_ops::divide(base->gradient_, base->output_, base->gradient_);  // to get the (b - 1) in the exponent
+    std::shared_ptr<Buffer> minus_one(new Buffer(power->output_->shape(), power->output_->dtype()));
+    buffer_ops::add(power->output_, -1, minus_one);
+    buffer_ops::pow(base->output_, minus_one, base->gradient_);
     buffer_ops::multiply(base->gradient_, power->output_, base->gradient_);
 
     // df/db
-    buffer_ops::ln(base->output_, power->gradient_);
-    buffer_ops::multiply(power->gradient_, node->output_, power->gradient_);
+    if (power->gradient_->size() == 1) {
+        std::shared_ptr<Buffer> temp(new Buffer(base->output_->shape(), base->output_->dtype()));
+        buffer_ops::ln(base->output_, temp);
+        float grad_sum = buffer_ops::reduceSum(temp);
+        power->gradient_->setIndex(0, (void*)(&grad_sum));
+    } else {
+        buffer_ops::ln(base->output_, power->gradient_);
+        buffer_ops::multiply(power->gradient_, node->output_, power->gradient_);
+    }
 }
 
 // TODO: broadcasting
@@ -167,11 +183,11 @@ void matmulGradient(std::shared_ptr<Node> node) {
     std::shared_ptr<Node> a = node->children_[node->arg_order_[0]];
     std::shared_ptr<Node> b = node->children_[node->arg_order_[1]];
 
-    std::shared_ptr<Buffer> a_transpose(new Buffer(a->output_->size(), a->output_->dtype()));
+    std::shared_ptr<Buffer> a_transpose(new Buffer(a->output_->shape(), a->output_->dtype()));
     std::vector<int> a_transpose_shape = a->shape_;
     std::swap(a_transpose_shape[a->shape_.size() - 2], a_transpose_shape[a->shape_.size() - 1]);
 
-    std::shared_ptr<Buffer> b_transpose(new Buffer(b->output_->size(), b->output_->dtype()));
+    std::shared_ptr<Buffer> b_transpose(new Buffer(b->output_->shape(), b->output_->dtype()));
     std::vector<int> b_transpose_shape = b->shape_;
     std::swap(b_transpose_shape[b->shape_.size() - 2], b_transpose_shape[b->shape_.size() - 1]);
 
@@ -211,6 +227,10 @@ void reluGradient(std::shared_ptr<Node> node) {
             _out->setIndex(index, (void*)(&output));
         },
         node->output_, a->gradient_);
+}
+
+void reduce_sumGradient(std::shared_ptr<Node> node) {
+    _propagate_current_grad(node, node->children_[node->arg_order_[0]]);
 }
 
 }  // namespace gradient

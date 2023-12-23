@@ -89,4 +89,6 @@ REGISTER_OPERATION(matmul);
 REGISTER_OPERATION(sigmoid);
 REGISTER_OPERATION(relu);
 
+REGISTER_OPERATION(reduce_sum);
+
 #endif  // OPS_H

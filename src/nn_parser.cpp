@@ -85,7 +85,7 @@ std::shared_ptr<Graph> NNParser::parse(const std::string& contents) {
         }
 
         if (at(contents) == ';') {
-            if (DEBUG) {
+            if (DEBUGGING) {
                 std::cout << "-- finished line " << line_ << ": " << std::endl << trim(lines_[line_ - 1]) << std::endl;
             }
 
@@ -99,7 +99,7 @@ std::shared_ptr<Graph> NNParser::parse(const std::string& contents) {
 
             buffer_ += at(contents);
         } else if (at(contents) == '\n') {
-            if (DEBUG) {
+            if (DEBUGGING) {
                 std::cout << "-- finished line " << line_ << ": " << std::endl << trim(lines_[line_ - 1]) << std::endl;
             }
 
@@ -253,7 +253,7 @@ std::shared_ptr<Graph> NNParser::parse(const std::string& contents) {
         }
     }
 
-    if (DEBUG) {
+    if (DEBUGGING) {
         std::cout << "Finished parsing" << std::endl;
         graph->printNodeValues();
     }
@@ -306,7 +306,7 @@ void NNParser::incrementCursor() {
     cursor_++;
     inBoundsNoError();  // safety check
 
-    if (DEBUG == 2) {
+    if (DEBUGGING == 2) {
         std::cout << "cursor incremented to " << cursor_ << std::endl;
     }
 }
