@@ -12,7 +12,7 @@ namespace generation {
 void fillNormal(std::shared_ptr<Buffer> buffer) {
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::normal_distribution<float> dis(0, std::sqrt(2. / 64));
+    std::uniform_real_distribution<float> dis(0, std::sqrt(3. / 64));
 
     for (int i = 0; i < buffer->size(); i++) {
         float x = dis(gen);

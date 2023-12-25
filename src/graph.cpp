@@ -18,6 +18,7 @@
 #include "buffer.h"
 #include "buffer_ops.h"
 #include "grad.h"
+#include "iterators.h"
 #include "kernel.h"
 #include "ops.h"
 #include "string_utils.h"
@@ -74,7 +75,7 @@ void Node::printOutput(std::ostream& stream) {
         batch_shape = shape_;
     }
 
-    kernel::BroadcastIterator it(batch_shape, batch_shape);
+    iterators::BroadcastIterator it(batch_shape, batch_shape);
 
     int m = shape_[shape_.size() - 2];
     int n = shape_[shape_.size() - 1];
@@ -129,7 +130,7 @@ void Node::printGradient(std::ostream& stream) {
         batch_shape = shape_;
     }
 
-    kernel::BroadcastIterator it(batch_shape, batch_shape);
+    iterators::BroadcastIterator it(batch_shape, batch_shape);
 
     int m = shape_[shape_.size() - 2];
     int n = shape_[shape_.size() - 1];
@@ -579,8 +580,17 @@ void Graph::applyGradients(int batch_size, float learning_rate) {
             buffer_ops::multiply(node->gradient_, learning_rate, node->gradient_);
             buffer_ops::divide(node->gradient_, batch_size, node->gradient_);
             buffer_ops::subtract(node->output_, node->gradient_, node->output_);
-            buffer_ops::set(node->gradient_, 1);
         }
+    }
+}
+
+void Graph::reset() {
+    for (auto& [id, node] : nodes_) {
+        if (!node->trainable_ && node->operation_type_ != operations::constant) {
+            buffer_ops::set(node->output_, 0);
+        }
+
+        buffer_ops::set(node->gradient_, 1);
     }
 }
 

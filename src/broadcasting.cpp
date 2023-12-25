@@ -1,10 +1,11 @@
 #include "broadcasting.h"
 
+#include <utility>
 #include <vector>
 
 namespace broadcasting {
 
-std::vector<int> padVector(const std::vector<int> &v, int size) {
+std::vector<int> padVector(const std::vector<int>& v, int size) {
     std::vector<int> padded = v;
     if (padded.size() < size) {
         std::vector<int> ones(size - padded.size(), 1);
@@ -12,6 +13,18 @@ std::vector<int> padVector(const std::vector<int> &v, int size) {
     }
 
     return padded;
+}
+
+std::pair<std::vector<int>, std::vector<int>> padVectors(const std::vector<int>& a, const std::vector<int>& b) {
+    int difference = a.size() - b.size();
+
+    if (difference > 0) {
+        return {a, padVector(b, a.size())};
+    } else if (difference < 0) {
+        return {padVector(a, b.size()), b};
+    }
+
+    return {a, b};
 }
 
 bool broadcastable(std::vector<int> a, std::vector<int> b) {

@@ -6,6 +6,7 @@
 #include "dtypes.h"
 #include "generation_utils.h"
 #include "graph.h"
+#include "iterators.h"
 #include "kernel.h"
 #include "logging.h"
 #include "nn_parser.h"
@@ -62,16 +63,16 @@ void basicTrainingLoopTest() {
     std::shared_ptr<Graph> g = parser.parse(contents);
     g->allocate();
 
-    const string dataset_path = "/home/joey/Downloads/scaled_synthetic_regression_data.csv";
-    vector<string> inputs = {"Feature"};
-    vector<string> outputs = {"Target"};
+    const string dataset_path = "data/sine.csv";
+    vector<string> inputs = {"t"};
+    vector<string> outputs = {"sine_value"};
 
     CSVDataset dataset = CSVDataset(dataset_path, inputs, outputs);
     const int batch_size = 32;
     const float learning_rate = 0.001;
 
     auto head = g->getNode("mse");
-    auto output = g->getNode("output");
+    auto output = g->getNode("final_output");
 
     ofstream log_file;
     log_file.open("./logs/train.log", std::ios::out | std::ios::app);
@@ -84,11 +85,9 @@ void basicTrainingLoopTest() {
         g->evaluate(dataset.sample(batch_size));
         g->calculateGradient();
 
-        /*auto grads = g->getGradient();
-        for (auto [name, node] : grads) {
-            std::cout << name << std::endl;
-            node->printGradient(std::cout);
-        }*/
+        grad_file << "TRAIN STEP " << i + 1 << endl;
+        g->gradLog(grad_file);
+        grad_file << "----------------" << endl;
 
         g->applyGradients(batch_size, learning_rate);
 
@@ -123,13 +122,15 @@ void basicTrainingLoopTest() {
 
             loss /= head->output_->size();
         }
+
+        g->reset();
     }
 
     cout << endl;
 }
 
 void iteratorTest() {
-    kernel::BroadcastIterator bi({1, 32, 32}, {32, 32, 32});
+    iterators::BroadcastIterator bi({1, 32, 32}, {32, 32, 32});
 
     cout << "initialized with " << endl;
     bi.print();
@@ -144,7 +145,7 @@ void iteratorTest() {
     }
 }
 
-void betterIteratorTest() {
+void bufferOpsTest() {
     vector<int> shape_a = {4, 5, 5};
     vector<int> shape_b = {1, 1, 1};
 
@@ -172,6 +173,30 @@ void betterIteratorTest() {
 
         cout << endl;
     }
+}
+
+void indexIteratorTest() {
+    iterators::IndexIterator it({4, 32, 32, 3});
+
+    while (!it.end()) {
+        cout << strings::vecToString(it.getIndices()) << ", " << it.getIndex() << endl;
+        it.increment();
+    }
+}
+
+void reduceSumTest() {
+    std::shared_ptr<Buffer> a(new Buffer({32, 32, 3}, DTYPE::float32));
+    std::shared_ptr<Buffer> b(new Buffer({1, 32, 3}, DTYPE::float32));
+
+    buffer_ops::set(a, 1);
+    buffer_ops::reduceSum(a, b, {0});
+
+    cout << "b: " << endl;
+    for (int i = 0; i < 32 * 3; i++) {
+        cout << b->getIndex<float>(i) << ", ";
+    }
+
+    cout << endl;
 }
 
 int main() {

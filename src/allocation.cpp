@@ -10,18 +10,6 @@
 #include "ops.h"
 #include "string_utils.h"
 
-// TODO: where should we put this?
-template <typename T>
-void printVec(const std::string& name, std::vector<T> v) {
-    if (name.size() > 0) {
-        std::cout << name << ": " << std::endl;
-    }
-
-    for (T& i : v) {
-        std::cout << i << std::endl;
-    }
-}
-
 // is this also where validation will be taking place?
 namespace allocation {
 
@@ -32,13 +20,7 @@ void allocateNode(std::shared_ptr<Node> node) {
 
     auto it = allocationMap.find(node->operation_type_);
     if (it != allocationMap.end()) {
-        std::cout << strings::debug("ALLOCATING NODE ") << strings::info(node->name_) << strings::debug(" OF TYPE ")
-                  << strings::info(node->operation_type_) << std::endl;
         it->second(node);
-        std::cout << strings::vecToString(node->shape_) << ", " << strings::vecToString(node->output_->shape()) << ", "
-                  << node->output_->size() << std::endl;
-        std::cout << strings::debug("FINISHED ALLOCATING NODE ") << strings::info(node->name_)
-                  << strings::debug(" OF TYPE ") << strings::info(node->operation_type_) << std::endl;
     } else {
         std::cerr << strings::error("allocation::allocateNode error: ") << "unrecognized node operation type "
                   << strings::info("`" + node->operation_type_ + "`") << std::endl;

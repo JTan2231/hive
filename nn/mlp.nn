@@ -1,17 +1,16 @@
 var a = normal(1, 64)
-var ab = normal(64)
+var ab = tensor(64)
 
 var b = normal(64, 64)
-var bb = normal(64)
+var bb = tensor(64)
 
 var head = normal(64, 1)
-var headb = normal(1)
+var headb = tensor(1)
 
-let model_input = input(Feature, 32, 1, 1)
-let label = input(Target, 32, 1, 1)
+let model_input = input(t, 32, 1, 1)
+let label = input(sine_value, 32, 1, 1)
 
 let x = matmul(model_input, a)
-x = add(x, ab)
 x = relu(x)
 
 x = matmul(x, b)
@@ -19,8 +18,7 @@ x = add(x, bb)
 x = relu(x)
 
 let output = matmul(x, head)
-output = add(output, headb)
+let final_output = add(output, headb)
 
-let mse = subtract(output, label)
-mse = multiply(mse, mse)
-mse = reduce_sum(mse)
+let e = subtract(label, final_output)
+let mse = reduce_sum(e)

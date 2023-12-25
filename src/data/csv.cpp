@@ -29,6 +29,7 @@ CSVDataset::CSVDataset(const std::string& filepath, const std::vector<std::strin
     } else {
         std::cerr << strings::error("CSVDataset::CSVDataset error: ") << "unable to open file "
                   << strings::info(filepath) << std::endl;
+        exit(-1);
     }
 
     for (auto& s : inputs) {

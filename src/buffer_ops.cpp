@@ -4,6 +4,7 @@
 
 #include "broadcasting.h"
 #include "buffer.h"
+#include "iterators.h"
 #include "kernel.h"
 #include "string_utils.h"
 
@@ -226,51 +227,64 @@ void pow(std::shared_ptr<Buffer> a, float b, std::shared_ptr<Buffer> out) {
         a, b, out);
 }
 
-// TODO: permutations
-// TODO: this can and needs to be more efficient
+// TODO: this isn't at all optimized for GPU usage
 //
 // things are currently laid out row-wise in memory
 // this might change? as such this function will need to change if/when that happens
-void transpose(std::shared_ptr<Buffer> a, const std::vector<int>& shape_a, std::shared_ptr<Buffer> out,
-               const std::vector<int>& shape_out) {
+void transpose(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, const std::vector<int>& permutation) {
     _assert_equal_sizes("transpose", a, out);
 
-    size_t matrix_count = 1;
-    for (int i = 0; i < shape_a.size() - 2; i++) {
-        matrix_count *= shape_a[i];
+    auto [a_shape, out_shape] = broadcasting::padVectors(a->shape(), out->shape());
 
-        if (shape_a[i] != shape_out[i]) {
-            std::cerr << strings::error("buffer_ops::transpose error: ")
-                      << "incompatible input/output batch shapes, got " << strings::info(strings::vecToString(shape_a))
-                      << " and " << strings::info(strings::vecToString(shape_out)) << std::endl;
+    std::set<int> seen_dims;
+
+    for (int dim : permutation) {
+        if (dim >= a_shape.size()) {
+            std::cerr << strings::error("buffer_ops::transpose error: ") << "dim " << strings::info(std::to_string(dim))
+                      << " is out of bounds in input shape " << strings::info(strings::vecToString(a_shape))
+                      << std::endl;
             exit(-1);
+        }
+
+        if (seen_dims.find(dim) != seen_dims.end()) {
+            std::cerr << strings::error("buffer_ops::transpose error: ") << "duplicate dim "
+                      << strings::info(std::to_string(dim)) << " in permutation "
+                      << strings::info(strings::vecToString(permutation)) << std::endl;
+            exit(-1);
+        } else {
+            seen_dims.insert(dim);
         }
     }
 
-    int a_row_count = shape_a[shape_a.size() - 2];
-    int a_col_count = shape_a[shape_a.size() - 1];
-    size_t matrix_size = a_row_count * a_col_count;
+    iterators::IndexIterator input_it(a_shape);
+    iterators::IndexIterator output_it(out_shape);
 
-    for (size_t i = 0; i < matrix_count; i++) {
-        for (size_t r = 0; r < a_row_count; r++) {
-            for (size_t c = 0; c < a_col_count; c++) {
-                size_t input_index = i * matrix_size + (r * a_col_count + c);
-                size_t output_index = i * matrix_size + (c * a_row_count + r);
-
-                float value = a->getIndex<float>(input_index);
-                out->setIndex(output_index, (void*)(&value));
-            }
+    while (!input_it.end()) {
+        for (int i = 0; i < output_it.current_.size(); i++) {
+            output_it.current_[i] = input_it.current_[permutation[i]];
         }
+
+        float value = a->getIndex<float>(input_it.getIndex());
+        out->setIndex(output_it.getIndex(), (void*)(&value));
+
+        input_it.increment();
     }
 }
 
 // this is basically copy + paste from `kernel.cpp`
 void matmul(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out,
             const std::vector<int>& shape_a, const std::vector<int>& shape_b, const std::vector<int>& shape_out) {
-    std::cout << strings::debug("ENTER buffer_ops::matmul") << std::endl;
     int l = shape_a.size();
     int r = shape_b.size();
     int o = shape_out.size();
+
+    if (l != r || l != o || r != o) {
+        std::cerr << strings::error("buffer_ops::matmul error: ") << "input and output shape sizes must be equal, got "
+                  << strings::info(strings::vecToString(shape_a)) << ", "
+                  << strings::info(strings::vecToString(shape_b)) << ", and "
+                  << strings::info(strings::vecToString(shape_out)) << std::endl;
+        exit(-1);
+    }
 
     size_t l_matrix_size = shape_a[l - 2] * shape_a[l - 1];
     size_t r_matrix_size = shape_b[r - 2] * shape_b[r - 1];
@@ -313,8 +327,8 @@ void matmul(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_pt
         }
     }
 
-    kernel::BroadcastIterator it = l_is_lesser ? kernel::BroadcastIterator(l_batch_shape, r_batch_shape)
-                                               : kernel::BroadcastIterator(r_batch_shape, l_batch_shape);
+    iterators::BroadcastIterator it = l_is_lesser ? iterators::BroadcastIterator(l_batch_shape, r_batch_shape)
+                                                  : iterators::BroadcastIterator(r_batch_shape, l_batch_shape);
 
     while (!it.end()) {
         auto [lesser_index, greater_index] = it.getIndices();
@@ -332,13 +346,12 @@ void matmul(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_pt
                     dot += avalue * bvalue;
                 }
 
-                out->setIndex((out_index * o_matrix_size) + (i * shape_out[o - 2]) + j, (void*)(&dot));
+                out->setIndex((out_index * o_matrix_size) + (i * shape_out[o - 1]) + j, (void*)(&dot));
             }
         }
 
         it.increment();
     }
-    std::cout << strings::debug("EXIT buffer_ops::matmul") << std::endl;
 }
 
 float reduceSum(std::shared_ptr<Buffer> a) {
@@ -348,6 +361,62 @@ float reduceSum(std::shared_ptr<Buffer> a) {
     }
 
     return output;
+}
+
+// this is naive and can most definitely be optimized
+void reduceSum(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, const std::vector<int>& indices) {
+    if (a->shape().size() != out->shape().size()) {
+        std::cerr << strings::error("buffer_ops::reduceSum error: ")
+                  << "input and output shapes must be equal in size, got "
+                  << strings::info(strings::vecToString(a->shape())) << " and "
+                  << strings::info(strings::vecToString(out->shape())) << std::endl;
+        exit(-1);
+    }
+
+    const std::vector<int>& a_shape = a->shape();
+    const std::vector<int>& out_shape = out->shape();
+
+    for (int i : indices) {
+        if (i >= a_shape.size()) {
+            std::cerr << strings::error("buffer_ops::reduceSum error: ") << "index " << strings::info(std::to_string(i))
+                      << " out of range for shape " << strings::info(strings::vecToString(a_shape)) << std::endl;
+            exit(-1);
+        }
+
+        if (out_shape[i] != 1) {
+            std::cerr << strings::error("buffer_ops::reduceSum error: ") << "index " << strings::info(std::to_string(i))
+                      << " of output shape " << strings::info(strings::vecToString(out_shape)) << " must be 1"
+                      << std::endl;
+            exit(-1);
+        }
+    }
+
+    iterators::IndexIterator it(a_shape);
+
+    while (!it.end()) {
+        std::vector<int> a_indices = it.getIndices();
+        size_t a_index = iterators::getFlatIndex(a_shape, a_indices);
+
+        // fill `out_indices`, set reduced indices to 0
+        std::vector<int> out_indices(a_indices.size());
+        for (int i = 0, j = 0; i < a_indices.size(); i++) {
+            if (j < indices.size() && i == indices[j]) {
+                j++;
+                out_indices[i] = 0;
+            } else {
+                out_indices[i] = a_indices[i];
+            }
+        }
+
+        size_t out_index = iterators::getFlatIndex(out_shape, out_indices);
+
+        float value = out->getIndex<float>(out_index);
+        value += a->getIndex<float>(a_index);
+
+        out->setIndex(out_index, (void*)(&value));
+
+        it.increment();
+    }
 }
 
 void set(std::shared_ptr<Buffer> a, float value) {

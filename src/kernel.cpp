@@ -6,6 +6,7 @@
 #include "broadcasting.h"
 #include "buffer.h"
 #include "graph.h"
+#include "iterators.h"
 #include "ops.h"
 #include "string_utils.h"
 
@@ -16,149 +17,6 @@ namespace kernel {
 // TODO: parallelization
 // TODO: gpu programming
 // TODO: is there anything we can do to manage precision? is that even an issue?
-
-BroadcastIterator::BroadcastIterator(std::vector<int> lesser, std::vector<int> greater) {
-    if (lesser.size() != greater.size()) {
-        std::cerr << strings::error("BroadcastIterator::BroadcastIterator error: ") << "shape sizes must be equal, got "
-                  << strings::info(strings::vecToString(lesser)) << " and "
-                  << strings::info(strings::vecToString(greater)) << std::endl;
-        exit(-1);
-    }
-
-    for (int i = 0; i < lesser.size(); i++) {
-        if (lesser[i] != greater[i] && lesser[i] != 1 && greater[i] != 1) {
-            std::cerr << strings::error("BroadcastIterator::BroadcastIterator error: ")
-                      << "dimensions must be equal or 1, got " << strings::info(strings::vecToString(lesser)) << " and "
-                      << strings::info(strings::vecToString(greater)) << std::endl;
-            exit(-1);
-        }
-    }
-
-    lesser_ = lesser;
-    greater_ = greater;
-
-    lesser_current_ = std::vector<int>(lesser.size(), 0);
-    greater_current_ = std::vector<int>(greater.size(), 0);
-}
-
-bool BroadcastIterator::end() {
-    return end_;
-}
-
-void BroadcastIterator::print() {
-    std::cout << "- greater: " << strings::info(strings::vecToString(greater_current_)) << std::endl;
-    std::cout << "- lesser: " << strings::info(strings::vecToString(lesser_current_)) << std::endl;
-}
-
-// returns {lesser_index, greater_index}
-std::pair<size_t, size_t> BroadcastIterator::getIndices() {
-    return {getIndex(false), getIndex(true)};
-}
-
-size_t BroadcastIterator::getIndex(bool greater) {
-    const std::vector<int>& indices = greater ? greater_current_ : lesser_current_;
-    const std::vector<int>& shape = greater ? greater_ : lesser_;
-
-    size_t index = indices.back();
-    size_t prefix = shape.back();
-    for (int i = shape.size() - 2; i > -1; i--) {
-        index += indices[i] * prefix;
-        prefix *= shape[i];
-    }
-
-    return index;
-}
-
-void BroadcastIterator::propagateChanges() {
-    std::vector<int> change_indices(greater_.size(), 0);
-    int change = 0;
-    for (int i = greater_current_.size() - 1; i > -1; i--) {
-        greater_current_[i] += change;
-        change_indices[i] += change;
-
-        if (greater_current_[i] == greater_[i]) {
-            change = 1;
-        } else if (greater_current_[i] == -1) {
-            change = -1;
-        } else {
-            change = 0;
-        }
-    }
-
-    for (int i = lesser_current_.size() - 1; i > -1; i--) {
-        if (lesser_[i] != 1) {
-            lesser_current_[i] += change_indices[i];
-        } else if (lesser_current_[i] == 1) {
-            lesser_current_[i] = 0;
-        }
-    }
-}
-
-void BroadcastIterator::resetOutOfBounds() {
-    for (int i = 0; i < greater_.size(); i++) {
-        if (greater_current_[i] == greater_[i]) {
-            greater_current_[i] = 0;
-        } else if (greater_current_[i] == -1) {
-            greater_current_[i] = greater_[i] - 1;
-        }
-
-        if (lesser_current_[i] == lesser_[i]) {
-            lesser_current_[i] = 0;
-        } else if (lesser_current_[i] == -1) {
-            lesser_current_[i] = lesser_[i] - 1;
-        }
-    }
-}
-
-void BroadcastIterator::updateEnd() {
-    end_ = true;
-    for (int i = 0; i < greater_.size(); i++) {
-        if (greater_current_[i] != greater_[i] - 1) {
-            end_ = false;
-            return;
-        }
-    }
-}
-
-bool BroadcastIterator::increment() {
-    int n = greater_.size();
-
-    greater_current_[n - 1]++;
-    lesser_current_[n - 1]++;
-    if (greater_current_[n - 1] == greater_[n - 1]) {
-        propagateChanges();
-    }
-
-    resetOutOfBounds();
-    updateEnd();
-
-    return !end_;
-}
-
-bool BroadcastIterator::decrement() {
-    int n = greater_.size();
-
-    greater_current_[n - 1]--;
-    lesser_current_[n - 1]--;
-    if (greater_current_[n - 1] == greater_[n - 1]) {
-        propagateChanges();
-    }
-
-    resetOutOfBounds();
-    updateEnd();
-
-    return !end_;
-}
-
-bool lesserGreater(std::vector<int> a, std::vector<int> b) {
-    for (int i = 0; i < a.size(); i++) {
-        if (a[i] < b[i]) {
-            return true;
-        }
-    }
-
-    return false;
-}
 
 bool broadcastable(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b) {
     auto as = a->shape();
@@ -188,9 +46,7 @@ void computeNode(std::shared_ptr<Node> node) {
 
     auto it = operationMap.find(node->operation_type_);
     if (it != operationMap.end()) {
-        std::cout << strings::error("COMPUTING NODE ") << strings::info(node->name_) << std::endl;
         it->second(node);
-        std::cout << strings::error("FINISHED COMPUTING NODE ") << strings::info(node->name_) << std::endl;
     } else {
         std::cerr << "kernel::computeNode error: unrecognized node operation type " << node->operation_type_
                   << std::endl;
@@ -202,20 +58,15 @@ void _element_wise(std::function<void(std::shared_ptr<Buffer>, std::shared_ptr<B
                                       size_t, size_t)>
                        element_function,
                    std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out) {
-    std::cout << strings::debug("ENTER BROADCASTED ELEMENT WISE") << std::endl;
-
     int padding_size = std::max(a->shape().size(), b->shape().size());
     std::vector<int> a_shape = broadcasting::padVector(a->shape(), padding_size);
     std::vector<int> b_shape = broadcasting::padVector(b->shape(), padding_size);
 
-    bool ab_order = lesserGreater(a_shape, b_shape);
+    bool ab_order = iterators::lesserGreater(a_shape, b_shape);
     const std::vector<int>& lesser = ab_order ? a_shape : b_shape;
     const std::vector<int>& greater = ab_order ? b_shape : a_shape;
 
-    std::cout << b->size() << ", " << a->size() << ", " << out->size() << std::endl;
-    std::cout << strings::vecToString(lesser) << ", " << strings::vecToString(greater) << std::endl;
-
-    BroadcastIterator it(lesser, greater);
+    iterators::BroadcastIterator it(lesser, greater);
     while (!it.end()) {
         auto [lesser_index, greater_index] = it.getIndices();
         if (ab_order) {
@@ -226,27 +77,21 @@ void _element_wise(std::function<void(std::shared_ptr<Buffer>, std::shared_ptr<B
 
         it.increment();
     }
-
-    std::cout << strings::debug("EXIT BROADCASTED ELEMENT WISE") << std::endl;
 }
 
 void _element_wise(std::function<void(std::shared_ptr<Buffer>, std::shared_ptr<Buffer>, size_t)> element_function,
                    std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out) {
-    std::cout << strings::debug("ENTER UNARY ELEMENT WISE") << std::endl;
     for (size_t i = 0; i < out->size(); i++) {
         element_function(a, out, i);
     }
-    std::cout << strings::debug("EXIT UNARY ELEMENT WISE") << std::endl;
 }
 
 void _element_wise(
     std::function<void(std::shared_ptr<Buffer>, float, std::shared_ptr<Buffer>, size_t)> element_function,
     std::shared_ptr<Buffer> a, float b, std::shared_ptr<Buffer> out) {
-    std::cout << strings::debug("ENTER BINARY ELEMENT WISE") << std::endl;
     for (size_t i = 0; i < out->size(); i++) {
         element_function(a, b, out, i);
     }
-    std::cout << strings::debug("EXIT BINARY ELEMENT WISE") << std::endl;
 }
 
 // naive implementation
@@ -304,8 +149,8 @@ void matmul(std::shared_ptr<Node> node) {
         }
     }
 
-    BroadcastIterator it =
-        l_is_lesser ? BroadcastIterator(l_batch_shape, r_batch_shape) : BroadcastIterator(r_batch_shape, l_batch_shape);
+    iterators::BroadcastIterator it = l_is_lesser ? iterators::BroadcastIterator(l_batch_shape, r_batch_shape)
+                                                  : iterators::BroadcastIterator(r_batch_shape, l_batch_shape);
 
     while (!it.end()) {
         auto [lesser_index, greater_index] = it.getIndices();
@@ -325,7 +170,7 @@ void matmul(std::shared_ptr<Node> node) {
                     dot += a * b;
                 }
 
-                node->output_->setIndex((out_index * o_matrix_size) + (i * node->shape_[o - 2]) + j, (void*)(&dot));
+                node->output_->setIndex((out_index * o_matrix_size) + (i * node->shape_[o - 1]) + j, (void*)(&dot));
             }
         }
 

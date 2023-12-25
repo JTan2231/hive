@@ -35,13 +35,13 @@ void relu(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out);
 void pow(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out);
 void pow(std::shared_ptr<Buffer> a, float b, std::shared_ptr<Buffer> out);
 
-void transpose(std::shared_ptr<Buffer> a, const std::vector<int>& shape_a, std::shared_ptr<Buffer> out,
-               const std::vector<int>& shape_out);
+void transpose(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, const std::vector<int>& permutation);
 
 void matmul(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out,
             const std::vector<int>& shape_a, const std::vector<int>& shape_b, const std::vector<int>& shape_out);
 
 float reduceSum(std::shared_ptr<Buffer> a);
+void reduceSum(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, const std::vector<int>& indices);
 
 void set(std::shared_ptr<Buffer> a, float value);
 

@@ -133,6 +133,8 @@ class Graph {
     // Graph::calculateGradient MUST be called before this to have any effect
     void applyGradients(int batch_size, float learning_rate);
 
+    void reset();
+
     void inverseTopologicalSort(std::function<void(std::shared_ptr<Node>)> visit_function);
 
     // topological sort for evaluate and allocate
