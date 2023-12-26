@@ -71,7 +71,7 @@ std::shared_ptr<Graph> NNParser::parse(const std::string& contents) {
     if (registered_variables_.size() > 0) {
         for (auto& p : registered_variables_) {
             // NOTE: these variables are shapeless
-            graph->createVariable(p, operations::input, {}, false);
+            graph->createVariable(p, operations::input, {}, false, false);
         }
     }
 
@@ -107,8 +107,10 @@ std::shared_ptr<Graph> NNParser::parse(const std::string& contents) {
         }
 
         buffer_ = trim(buffer_);
-        if (buffer_ == variable_declarator_ || buffer_ == constant_declarator_) {
+        if (buffer_ == variable_declarator_ || buffer_ == constant_declarator_ || buffer_ == const_declarator_) {
             bool trainable = buffer_ == variable_declarator_;
+            bool is_const = buffer_ == const_declarator_;
+
             incrementAndAdd(contents);  // check if this is a keyword or
                                         // just part of a variable name
             if (buffer_.back() == ' ') {
@@ -137,7 +139,7 @@ std::shared_ptr<Graph> NNParser::parse(const std::string& contents) {
 
                 // cursor should be left at the start of the variable
                 // definition
-                registerVariableDefinition(graph, variable_name, contents, false, trainable);
+                registerVariableDefinition(graph, variable_name, contents, false, trainable, is_const);
 
                 buffer_ = "";
             }
@@ -168,7 +170,7 @@ std::shared_ptr<Graph> NNParser::parse(const std::string& contents) {
 
             // cursor should be left at the start of the variable
             // definition
-            registerVariableDefinition(graph, variable_name, contents, false, false);
+            registerVariableDefinition(graph, variable_name, contents, false, false, false);
             buffer_ = "";
         } else if (buffer_ == function_declarator_) {
             // functions have 3 rules (for now):
@@ -387,7 +389,8 @@ std::string NNParser::registerVariableName(const std::string& contents) {
 }
 
 std::string NNParser::registerVariableDefinition(std::shared_ptr<Graph> graph, std::string variable_name,
-                                                 const std::string& contents, bool is_arg, bool trainable) {
+                                                 const std::string& contents, bool is_arg, bool trainable,
+                                                 bool is_const) {
     // the definition MUST start with an op
     // so we start with looking for the end of the op name,
     // which is either a `;` or `(`
@@ -442,7 +445,7 @@ std::string NNParser::registerVariableDefinition(std::shared_ptr<Graph> graph, s
 
                     // this arg is the result of an operation
                     // get the result and attach it here
-                    arg_buffer = registerVariableDefinition(graph, arg_buffer, contents, true, trainable);
+                    arg_buffer = registerVariableDefinition(graph, arg_buffer, contents, true, trainable, is_const);
                     args.push_back(arg_buffer);
                     arg_buffer = "";
                 } else if (registered_variables_.find(arg_buffer) != registered_variables_.end()) {
@@ -492,7 +495,7 @@ std::string NNParser::registerVariableDefinition(std::shared_ptr<Graph> graph, s
     if (registered_functions_.find(op_name) != registered_functions_.end()) {
         variable_node_name = graph->createFunctionVariable(variable_name, args, registered_functions_[op_name]);
     } else {
-        variable_node_name = graph->createVariable(variable_name, op_name, args, trainable);
+        variable_node_name = graph->createVariable(variable_name, op_name, args, trainable, is_const);
     }
 
     if (inBoundsNoError() && at(contents) == ')') {

@@ -51,7 +51,6 @@ void _assert_equal_dtypes(const std::string& op, std::shared_ptr<Buffer> a, std:
 }
 
 void multiply(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out) {
-    _assert_equal_sizes("multiply", a, b, out);
     _assert_equal_dtypes("multiply", a, b, out);
 
     kernel::_element_wise(
@@ -61,6 +60,29 @@ void multiply(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_
             _out->setIndex(out_index, (void*)(&output));
         },
         a, b, out);
+}
+
+void multiplyAndReduce(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out) {
+    std::vector<int> old_out_shape = out->shape_;
+    const std::vector<int>& greater_input_shape = broadcasting::greaterShape(a->shape_, b->shape_);
+    out->shape_ = broadcasting::padVector(out->shape_, greater_input_shape.size());
+
+    std::vector<int> reduction_dims;
+    for (int i = 0; i < out->shape_.size(); i++) {
+        if (out->shape_[i] == 1) {
+            reduction_dims.push_back(i);
+        }
+    }
+
+    if (reduction_dims.size() > 0) {
+        std::shared_ptr<Buffer> temp(new Buffer(greater_input_shape, DTYPE::float32));
+        multiply(a, b, temp);
+        reduceSum(temp, out, reduction_dims);
+    } else {
+        multiply(a, b, out);
+    }
+
+    out->shape_ = old_out_shape;
 }
 
 void multiply(std::shared_ptr<Buffer> a, float b, std::shared_ptr<Buffer> out) {
@@ -108,10 +130,7 @@ void add(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<B
         [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _b, std::shared_ptr<Buffer> _out, size_t a_index,
            size_t b_index, size_t out_index) {
             float output = _a->getIndex<float>(a_index) + _b->getIndex<float>(b_index);
-            std::cout << strings::error("OUTPUT: ") << output << std::endl;
             _out->setIndex(out_index, (void*)(&output));
-            std::cout << strings::error("INDEX ") << strings::info(std::to_string(out_index))
-                      << strings::error(" SET TO ") << output << std::endl;
         },
         a, b, out);
 }
@@ -142,18 +161,17 @@ void subtract(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_
 }
 
 void reciprocal(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out) {
-    _assert_equal_sizes("reciprocal", a, out);
     _assert_equal_dtypes("reciprocal", a, out);
 
     kernel::_element_wise(
-        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _out, size_t index) {
-            if (_a->getIndex<float>(index) == 0.) {
+        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _out, size_t in_index, size_t out_index) {
+            if (_a->getIndex<float>(in_index) == 0.) {
                 std::cerr << strings::error("buffer_ops::reciprocal error: ") << "divide by 0 error" << std::endl;
                 exit(-1);
             }
 
-            float output = 1 / _a->getIndex<float>(index);
-            _out->setIndex(index, (void*)(&output));
+            float output = 1 / _a->getIndex<float>(in_index);
+            _out->setIndex(out_index, (void*)(&output));
         },
         a, out);
 }
@@ -163,16 +181,16 @@ void ln(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out) {
     _assert_equal_dtypes("ln", a, out);
 
     kernel::_element_wise(
-        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _out, size_t index) {
+        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _out, size_t in_index, size_t out_index) {
             // TODO: option to ignore?
-            if (_a->getIndex<float>(index) <= EPSILON) {
+            if (_a->getIndex<float>(in_index) <= EPSILON) {
                 return;
-                // std::cerr << strings::error("buffer_ops::ln error: ") << "cannot take natural log of 0" << std::endl;
+                std::cerr << strings::error("buffer_ops::ln error: ") << "cannot take natural log of 0" << std::endl;
                 // exit(-1);
             }
 
-            float output = std::log(_a->getIndex<float>(index));
-            _out->setIndex(index, (void*)(&output));
+            float output = std::log(_a->getIndex<float>(in_index));
+            _out->setIndex(out_index, (void*)(&output));
         },
         a, out);
 }
@@ -182,9 +200,9 @@ void sigmoid(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out) {
     _assert_equal_dtypes("sigmoid", a, out);
 
     kernel::_element_wise(
-        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t index) {
-            float output = 1 / (1 + std::exp(-(a->getIndex<float>(index))));
-            out->setIndex(index, (void*)(&output));
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t in_index, size_t out_index) {
+            float output = 1 / (1 + std::exp(-(a->getIndex<float>(in_index))));
+            out->setIndex(out_index, (void*)(&output));
         },
         a, out);
 }
@@ -194,10 +212,10 @@ void relu(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out) {
     _assert_equal_dtypes("relu", a, out);
 
     kernel::_element_wise(
-        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t index) {
-            float output = a->getIndex<float>(index);
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t in_index, size_t out_index) {
+            float output = a->getIndex<float>(in_index);
             output = output > EPSILON ? output : 0;
-            out->setIndex(index, (void*)(&output));
+            out->setIndex(out_index, (void*)(&output));
         },
         a, out);
 }
@@ -271,27 +289,18 @@ void transpose(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, const std
     }
 }
 
-// this is basically copy + paste from `kernel.cpp`
 void matmul(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out,
             const std::vector<int>& shape_a, const std::vector<int>& shape_b, const std::vector<int>& shape_out) {
     int l = shape_a.size();
     int r = shape_b.size();
     int o = shape_out.size();
 
-    if (l != r || l != o || r != o) {
-        std::cerr << strings::error("buffer_ops::matmul error: ") << "input and output shape sizes must be equal, got "
-                  << strings::info(strings::vecToString(shape_a)) << ", "
-                  << strings::info(strings::vecToString(shape_b)) << ", and "
-                  << strings::info(strings::vecToString(shape_out)) << std::endl;
-        exit(-1);
-    }
-
     size_t l_matrix_size = shape_a[l - 2] * shape_a[l - 1];
     size_t r_matrix_size = shape_b[r - 2] * shape_b[r - 1];
     size_t o_matrix_size = shape_out[o - 2] * shape_out[o - 1];
 
     // for batched matrix multiplication, only the last two dimensions are considered in the multiplication
-    // the rest of the dimenions just served to act as groupings of matrices
+    // the rest of the dimenions just serve to act as groupings of matrices
     //
     // NOTE: shape verification is performed in `allocation.cpp`
     size_t matrix_count = 1;
@@ -299,7 +308,6 @@ void matmul(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_pt
         matrix_count *= shape_a[i];
     }
 
-    // NOTE: broadcasting isn't really tested all that well
     std::vector<int> l_batch_shape;
     std::vector<int> r_batch_shape;
 
@@ -327,8 +335,14 @@ void matmul(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_pt
         }
     }
 
-    iterators::BroadcastIterator it = l_is_lesser ? iterators::BroadcastIterator(l_batch_shape, r_batch_shape)
-                                                  : iterators::BroadcastIterator(r_batch_shape, l_batch_shape);
+    iterators::BroadcastIterator it;
+
+    if (l_batch_shape.size() > 0 && r_batch_shape.size() > 0) {
+        it = l_is_lesser ? iterators::BroadcastIterator(l_batch_shape, r_batch_shape)
+                         : iterators::BroadcastIterator(r_batch_shape, l_batch_shape);
+    } else {
+        it = iterators::BroadcastIterator({1}, {1});
+    }
 
     while (!it.end()) {
         auto [lesser_index, greater_index] = it.getIndices();

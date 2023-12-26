@@ -43,4 +43,22 @@ bool broadcastable(std::vector<int> a, std::vector<int> b) {
     return true;
 }
 
+std::vector<int> greaterShape(const std::vector<int>& a, const std::vector<int>& b) {
+    if (a.size() > b.size()) {
+        return a;
+    } else if (b.size() > a.size()) {
+        return b;
+    }
+
+    for (int i = 0; i < a.size(); i++) {
+        if (a[i] > b[i]) {
+            return a;
+        } else if (b[i] > a[i]) {
+            return b;
+        }
+    }
+
+    return a;
+}
+
 }  // namespace broadcasting

@@ -20,6 +20,7 @@
 #include "grad.h"
 #include "iterators.h"
 #include "kernel.h"
+#include "logging.h"
 #include "ops.h"
 #include "string_utils.h"
 
@@ -75,7 +76,7 @@ void Node::printOutput(std::ostream& stream) {
         batch_shape = shape_;
     }
 
-    iterators::BroadcastIterator it(batch_shape, batch_shape);
+    iterators::IndexIterator it(batch_shape);
 
     int m = shape_[shape_.size() - 2];
     int n = shape_[shape_.size() - 1];
@@ -83,7 +84,7 @@ void Node::printOutput(std::ostream& stream) {
     stream << "    ";
     if (shape_.size() > 2) {
         while (!it.end()) {
-            auto [_, index] = it.getIndices();
+            size_t index = it.getIndex();
 
             for (int r = 0; r < m; r++) {
                 for (int c = 0; c < n; c++) {
@@ -130,7 +131,7 @@ void Node::printGradient(std::ostream& stream) {
         batch_shape = shape_;
     }
 
-    iterators::BroadcastIterator it(batch_shape, batch_shape);
+    iterators::IndexIterator it(batch_shape);
 
     int m = shape_[shape_.size() - 2];
     int n = shape_[shape_.size() - 1];
@@ -138,7 +139,7 @@ void Node::printGradient(std::ostream& stream) {
     stream << "    ";
     if (shape_.size() > 2) {
         while (!it.end()) {
-            auto [_, index] = it.getIndices();
+            size_t index = it.getIndex();
 
             for (int r = 0; r < m; r++) {
                 for (int c = 0; c < n; c++) {
@@ -249,13 +250,15 @@ void Graph::newEdge(int from, int to) {
 }
 
 std::shared_ptr<Node> Graph::_create_variable(const std::string& name, const std::string& operation_type,
-                                              const std::vector<std::string>& arguments, bool trainable) {
+                                              const std::vector<std::string>& arguments, bool trainable,
+                                              bool is_const) {
     std::shared_ptr<Node> new_node = newNode();
 
     new_node->name_ = name;
     new_node->operation_type_ = operation_type;
     new_node->arg_order_ = arguments;
     new_node->trainable_ = trainable;
+    new_node->const_ = is_const;
 
     while (new_node->name_.size() == 0 || variable_map_.find(new_node->name_) != variable_map_.end()) {
         new_node->name_ = name + "_" + strings::randomString(5);
@@ -351,8 +354,8 @@ std::shared_ptr<Node> Graph::_create_variable(const std::string& name, const std
 // NOTE: edges_ isn't being updated here
 //       is it needed as a field?
 std::string Graph::createVariable(const std::string& name, const std::string& operation_type,
-                                  const std::vector<std::string>& arguments, bool trainable) {
-    std::shared_ptr<Node> new_node = _create_variable(name, operation_type, arguments, trainable);
+                                  const std::vector<std::string>& arguments, bool trainable, bool is_const) {
+    std::shared_ptr<Node> new_node = _create_variable(name, operation_type, arguments, trainable, is_const);
 
     return new_node->name_;
 }
@@ -381,6 +384,21 @@ std::vector<std::shared_ptr<Node>> Graph::getInputs() {
     }
 
     return inputs;
+}
+
+void Graph::setLossNode(const std::string& name) {
+    loss_node_ = name;
+}
+
+float Graph::getLoss() {
+    std::shared_ptr<Node> loss_node = getNode(loss_node_);
+
+    float loss = 0;
+    for (int i = 0; i < loss_node->output_->size(); i++) {
+        loss += loss_node->output_->getIndex<float>(i);
+    }
+
+    return loss;
 }
 
 // created during function calls
@@ -546,14 +564,23 @@ void Graph::calculateGradient() {
 
 void Graph::inverseTopologicalSort(std::function<void(std::shared_ptr<Node>)> visit_function) {
     std::queue<std::shared_ptr<Node>> q;
-    q.push(getHead());
+    q.push(getNode(loss_node_));
+
+    std::stringstream log_stream;
 
     std::shared_ptr<Node> current;
     while (!q.empty()) {
         current = q.front();
         q.pop();
 
-        gradient::propagateNode(current);
+        visit_function(current);
+
+        if (current->trainable_) {
+            log_stream << current->name_ << " " << strings::vecToString(current->shape_) << std::endl;
+            current->printGradient(log_stream);
+            INFO(log_stream.str());
+            log_stream.flush();
+        }
 
         for (auto& [name, child] : current->children_) {
             q.push(child);
@@ -586,11 +613,11 @@ void Graph::applyGradients(int batch_size, float learning_rate) {
 
 void Graph::reset() {
     for (auto& [id, node] : nodes_) {
-        if (!node->trainable_ && node->operation_type_ != operations::constant) {
-            buffer_ops::set(node->output_, 0);
+        if (!node->trainable_ && node->operation_type_ != operations::constant && !node->const_) {
+            buffer_ops::set(node->output_, 0.);
         }
 
-        buffer_ops::set(node->gradient_, 1);
+        buffer_ops::set(node->gradient_, 1.);
     }
 }
 

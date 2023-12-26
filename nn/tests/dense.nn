@@ -1,0 +1,15 @@
+var weights = normal(5, 5)
+var bias = tensor(5)
+
+var weights2 = normal(5, 5)
+var bias2 = normal(5)
+
+const i = normal(2, 1, 5)
+let weight_output = matmul(i, weights)
+let bias_output = add(weight_output, bias)
+bias_output = relu(bias_output)
+
+weight_output = matmul(weight_output, weights2)
+bias_output = add(weight_output, bias2)
+
+let reduced_output = reduce_sum(bias_output)

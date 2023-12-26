@@ -1,0 +1,4 @@
+var weights = normal(5, 5)
+let w = normal(1)
+
+let output = multiply(weights, w)

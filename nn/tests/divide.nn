@@ -1,0 +1,5 @@
+var weights = normal(5, 5)
+let w = normal(1, 5)
+
+let output = divide(weights, w)
+output = divide(output, w)

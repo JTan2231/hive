@@ -21,8 +21,9 @@ void _element_wise(std::function<void(std::shared_ptr<Buffer>, std::shared_ptr<B
                        element_function,
                    std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out);
 
-void _element_wise(std::function<void(std::shared_ptr<Buffer>, std::shared_ptr<Buffer>, size_t)> element_function,
-                   std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out);
+void _element_wise(
+    std::function<void(std::shared_ptr<Buffer>, std::shared_ptr<Buffer>, size_t, size_t)> element_function,
+    std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out);
 
 void _element_wise(
     std::function<void(std::shared_ptr<Buffer>, float, std::shared_ptr<Buffer>, size_t)> element_function,

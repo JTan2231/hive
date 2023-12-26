@@ -1,0 +1,3 @@
+var weights = normal(5, 5)
+
+let output = sqrt(weights)

@@ -39,11 +39,18 @@ IndexIterator::IndexIterator(const std::vector<int>& shape) {
 
     std::reverse(strides_.begin(), strides_.end());
 
+    inc_count_ = 0;
+    size_ = 1;
+    for (int i : shape) {
+        size_ *= i;
+    }
+
     end_ = false;
 }
 
 void IndexIterator::increment() {
     int n = current_.size();
+    inc_count_++;
 
     current_[n - 1]++;
 
@@ -66,7 +73,7 @@ void IndexIterator::increment() {
 }
 
 bool IndexIterator::end() {
-    return end_;
+    return inc_count_ >= size_;
 }
 
 size_t IndexIterator::getIndex() {
@@ -80,6 +87,9 @@ size_t IndexIterator::getIndex() {
 
 std::vector<int> IndexIterator::getIndices() {
     return current_;
+}
+
+BroadcastIterator::BroadcastIterator() {
 }
 
 BroadcastIterator::BroadcastIterator(std::vector<int> lesser, std::vector<int> greater) {
@@ -104,10 +114,16 @@ BroadcastIterator::BroadcastIterator(std::vector<int> lesser, std::vector<int> g
 
     lesser_current_ = std::vector<int>(lesser.size(), 0);
     greater_current_ = std::vector<int>(greater.size(), 0);
+
+    inc_count_ = 0;
+    size_ = 1;
+    for (int i : greater_) {
+        size_ *= i;
+    }
 }
 
 bool BroadcastIterator::end() {
-    return end_;
+    return inc_count_ >= size_;
 }
 
 void BroadcastIterator::print() {
@@ -187,6 +203,7 @@ void BroadcastIterator::updateEnd() {
 
 bool BroadcastIterator::increment() {
     int n = greater_.size();
+    inc_count_++;
 
     greater_current_[n - 1]++;
     lesser_current_[n - 1]++;

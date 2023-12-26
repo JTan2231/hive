@@ -1,5 +1,7 @@
 #include "buffer.h"
 
+#include <emmintrin.h>
+
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
@@ -19,12 +21,12 @@ Buffer::Buffer(std::vector<int> shape, DTYPE dtype) : shape_(shape), dtype_(dtyp
 
     size_ = size;
 
-    data_ = malloc(size * dtypes::dtypeSize(dtype));
+    data_ = _mm_malloc(size * dtypes::dtypeSize(dtype), 16);
     memset(data_, 0, size * dtypes::dtypeSize(dtype));
 }
 
 Buffer::~Buffer() {
-    free(data_);
+    _mm_free(data_);
 }
 
 std::vector<int> Buffer::shape() {

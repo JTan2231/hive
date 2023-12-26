@@ -11,6 +11,7 @@ let model_input = input(t, 32, 1, 1)
 let label = input(sine_value, 32, 1, 1)
 
 let x = matmul(model_input, a)
+x = add(x, ab)
 x = relu(x)
 
 x = matmul(x, b)
@@ -21,4 +22,5 @@ let output = matmul(x, head)
 let final_output = add(output, headb)
 
 let e = subtract(label, final_output)
-let mse = reduce_sum(e)
+let se = pow(e, 2)
+let mse = reduce_sum(se)

@@ -9,6 +9,7 @@
 #include "iterators.h"
 #include "kernel.h"
 #include "logging.h"
+#include "metrics.h"
 #include "nn_parser.h"
 #include "string_utils.h"
 
@@ -63,16 +64,21 @@ void basicTrainingLoopTest() {
     std::shared_ptr<Graph> g = parser.parse(contents);
     g->allocate();
 
-    const string dataset_path = "data/sine.csv";
+    const string dataset_path = "/home/joey/Downloads/sine_data.csv";
     vector<string> inputs = {"t"};
     vector<string> outputs = {"sine_value"};
 
     CSVDataset dataset = CSVDataset(dataset_path, inputs, outputs);
     const int batch_size = 32;
-    const float learning_rate = 0.001;
+    const float learning_rate = 0.01;
 
-    auto head = g->getNode("mse");
-    auto output = g->getNode("final_output");
+    auto output = g->getNode("e");
+    auto loss_node = g->getNode("mse");
+
+    auto pred_node = g->getNode("final_output");
+    auto label_node = g->getNode("label");
+
+    g->setLossNode("mse");
 
     ofstream log_file;
     log_file.open("./logs/train.log", std::ios::out | std::ios::app);
@@ -80,9 +86,18 @@ void basicTrainingLoopTest() {
     ofstream grad_file;
     grad_file.open("./logs/grad.log", std::ios::out | std::ios::app);
 
-    float loss = 0;
-    for (int i = 0; i < 1000; i++) {
-        g->evaluate(dataset.sample(batch_size));
+    metrics::MeanAbsoluteError mae;
+    metrics::Mean loss;
+
+    int epochs = 0;
+    for (int i = 0; i < 3200; i++) {
+        auto data = dataset.sample(batch_size);
+
+        g->evaluate(data);
+
+        mae.update(pred_node->output_, label_node->output_);
+        loss.update(loss_node->output_);
+
         g->calculateGradient();
 
         grad_file << "TRAIN STEP " << i + 1 << endl;
@@ -92,35 +107,20 @@ void basicTrainingLoopTest() {
         g->applyGradients(batch_size, learning_rate);
 
         if (LOG) {
-            INFO("Step " + to_string(i + 1) + " loss: " + to_string(loss));
+            // INFO("Step " + to_string(i + 1) + " loss: " + to_string(loss));
             g->log(log_file);
         }
 
-        float avg = 0;
-        for (int i = 0; i < output->output_->size(); i++) {
-            avg += output->output_->getIndex<float>(i);
-        }
+        cout << strings::error("TRAINING STEP " + to_string(i + 1) + ", LOSS: ")
+             << strings::debug(to_string(mae.value())) << strings::error(", OUTPUT: ")
+             << strings::debug(to_string(loss.value())) << endl;
 
-        avg /= output->output_->size();
+        if ((i + 1) % 32 == 0) {
+            cout << strings::debug("        EPOCH " + to_string((i + 1) / 32) + " LOSS, METRIC: ") << loss.value()
+                 << ", " << mae.value() << endl;
 
-        cout << strings::error("TRAINING STEP " + to_string(i + 1) + ", LOSS: ") << strings::debug(to_string(loss))
-             << strings::error(", OUTPUT: ") << strings::debug(to_string(avg)) << endl;
-
-        if (isnan(output->output_->getIndex<float>(0)) || isinf(output->output_->getIndex<float>(0))) {
-            cout << strings::error("ERROR: NAN PREDICTION VALUE") << endl;
-            exit(-1);
-        }
-
-        if (isnan(head->output_->getIndex<float>(0)) || isinf(head->output_->getIndex<float>(0))) {
-            cout << strings::error("ERROR: NAN LOSS VALUE") << endl;
-            exit(-1);
-        } else {
-            loss = 0;
-            for (int i = 0; i < head->output_->size(); i++) {
-                loss += head->output_->getIndex<float>(i);
-            }
-
-            loss /= head->output_->size();
+            loss.reset();
+            mae.reset();
         }
 
         g->reset();
@@ -197,6 +197,76 @@ void reduceSumTest() {
     }
 
     cout << endl;
+}
+
+void basicBinaryOpGradientTest(const string& op_name) {
+    const string filepath = "./nn/tests/" + op_name + ".nn";
+    const string contents = nn_parser::readFile(filepath);
+
+    nn_parser::NNParser parser(contents);
+    std::shared_ptr<Graph> g = parser.parse(contents);
+    g->allocate();
+
+    g->evaluate();
+    g->calculateGradient();
+
+    auto weights = g->getNode("weights");
+
+    cout << "weights " << endl;
+    weights->printOutput(cout);
+    weights->printGradient(cout);
+
+    cout << "w " << endl;
+    auto w = g->getNode("w");
+    w->printOutput(cout);
+}
+
+void basicUnaryOpGradientTest(const string& op_name) {
+    const string filepath = "./nn/tests/" + op_name + ".nn";
+    const string contents = nn_parser::readFile(filepath);
+
+    nn_parser::NNParser parser(contents);
+    std::shared_ptr<Graph> g = parser.parse(contents);
+    g->allocate();
+
+    g->evaluate();
+    g->calculateGradient();
+
+    auto weights = g->getNode("weights");
+
+    cout << "weights " << endl;
+    weights->printOutput(cout);
+    weights->printGradient(cout);
+
+    cout << "output " << endl;
+    auto w = g->getNode("output");
+    w->printOutput(cout);
+}
+
+void denseLayerTest() {
+    const string filepath = "./nn/tests/dense.nn";
+    const string contents = nn_parser::readFile(filepath);
+
+    nn_parser::NNParser parser(contents);
+    std::shared_ptr<Graph> g = parser.parse(contents);
+    g->allocate();
+
+    for (int i = 0; i < 10; i++) {
+        g->evaluate();
+        g->calculateGradient();
+        g->applyGradients(1, 0.01);
+        g->reset();
+    }
+
+    auto weights = g->getNode("weights");
+
+    cout << "weights " << endl;
+    weights->printOutput(cout);
+    weights->printGradient(cout);
+
+    cout << "i " << endl;
+    auto i = g->getNode("i");
+    i->printOutput(cout);
 }
 
 int main() {

@@ -122,7 +122,7 @@ std::vector<std::string> CSVDataset::parseCSVRow(const std::string& row) {
 std::unordered_map<std::string, std::vector<float>> CSVDataset::sample(int batch_size) {
     std::unordered_map<std::string, std::vector<float>> values;
 
-    for (int i = 0; i < batch_size; i++) {
+    for (int j = 0; j < batch_size; j++) {
         int row_index = generation::randomInt(0, (int)(rows_.size()));
         std::vector<std::string> row = parseCSVRow(rows_[row_index]);
 

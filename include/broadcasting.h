@@ -14,6 +14,8 @@ bool broadcastable(std::vector<int> a, std::vector<int> b);
 
 std::vector<int> makeBroadcastable(const std::vector<int>& a, const std::vector<int>& target);
 
+std::vector<int> greaterShape(const std::vector<int>& a, const std::vector<int>& b);
+
 }  // namespace broadcasting
 
 #endif

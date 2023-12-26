@@ -30,10 +30,15 @@ class IndexIterator {
     std::vector<int> shape_;
 
     bool end_;
+
+    size_t size_;
+
+    size_t inc_count_;
 };
 
 class BroadcastIterator {
    public:
+    BroadcastIterator();
     BroadcastIterator(std::vector<int> lesser, std::vector<int> greater);
 
     bool increment();
@@ -59,6 +64,10 @@ class BroadcastIterator {
     void updateEnd();
 
     bool end_;
+
+    size_t size_;
+
+    size_t inc_count_;
 
     std::vector<int> greater_;
     std::vector<int> lesser_;

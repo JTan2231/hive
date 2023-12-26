@@ -62,6 +62,8 @@ class Node {
 
     bool trainable_;
 
+    bool const_;
+
     void printOutput(std::ostream& stream);
 
     void printGradient(std::ostream& stream);
@@ -98,7 +100,7 @@ class Graph {
     // NOTE: edges_ isn't being updated here
     //       is it needed as a field?
     std::string createVariable(const std::string& name, const std::string& operation_type,
-                               const std::vector<std::string>& arguments, bool trainable);
+                               const std::vector<std::string>& arguments, bool trainable, bool is_const);
 
     std::string createFunctionVariable(const std::string& name, const std::vector<std::string>& arguments,
                                        const std::shared_ptr<Graph> graph);
@@ -108,6 +110,10 @@ class Graph {
     bool isVariable(const std::string& name);
 
     bool isNode(int id);
+
+    void setLossNode(const std::string& name);
+
+    float getLoss();
 
     std::shared_ptr<Node> getNode(int id);
 
@@ -166,7 +172,9 @@ class Graph {
     std::map<std::string, std::shared_ptr<Node>> inputs_;
 
     std::shared_ptr<Node> _create_variable(const std::string& name, const std::string& operation_type,
-                                           const std::vector<std::string>& arguments, bool trainable);
+                                           const std::vector<std::string>& arguments, bool trainable, bool is_const);
+
+    std::string loss_node_;
 
     // this is for when a variable is reassigned
     // e.g. let A = tensor(1, 2)
