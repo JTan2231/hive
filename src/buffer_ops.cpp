@@ -13,7 +13,7 @@ namespace buffer_ops {
 
 void _assert_equal_sizes(const std::string& op, std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b,
                          std::shared_ptr<Buffer> c) {
-    if (!kernel::broadcastable(a, b) && (a->size() != b->size() || a->size() != c->size())) {
+    if (!broadcasting::broadcastable(a, b) && (a->size() != b->size() || a->size() != c->size())) {
         std::cerr << strings::error("buffer_ops::" + op + " error: ") << "input and output sizes must be equal, got "
                   << strings::info(std::to_string(a->size())) << ", " << strings::info(std::to_string(b->size()))
                   << ", and " << strings::info(std::to_string(c->size())) << std::endl;
@@ -54,10 +54,10 @@ void multiply(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_
     _assert_equal_dtypes("multiply", a, b, out);
 
     kernel::_element_wise(
-        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _b, std::shared_ptr<Buffer> _out, size_t a_index,
-           size_t b_index, size_t out_index) {
-            float output = _a->getIndex<float>(a_index) * _b->getIndex<float>(b_index);
-            _out->setIndex(out_index, (void*)(&output));
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out,
+           const std::vector<int>& indices) {
+            float output = a->getIndex<float>(indices) * b->getIndex<float>(indices);
+            out->setIndex(indices, (void*)(&output));
         },
         a, b, out);
 }
@@ -75,7 +75,7 @@ void multiplyAndReduce(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std
     }
 
     if (reduction_dims.size() > 0) {
-        std::shared_ptr<Buffer> temp(new Buffer(greater_input_shape, DTYPE::float32));
+        std::shared_ptr<GraphBuffer> temp(new GraphBuffer(greater_input_shape, DTYPE::float32));
         multiply(a, b, temp);
         reduceSum(temp, out, reduction_dims);
     } else {
@@ -97,15 +97,15 @@ void divide(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_pt
     _assert_equal_dtypes("divide", a, b, out);
 
     kernel::_element_wise(
-        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _b, std::shared_ptr<Buffer> _out, size_t a_index,
-           size_t b_index, size_t out_index) {
-            if (_b->getIndex<float>(b_index) == 0.) {
+        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _b, std::shared_ptr<Buffer> _out,
+           const std::vector<int>& indices) {
+            if (_b->getIndex<float>(indices) == 0.) {
                 std::cerr << strings::error("buffer_ops::divide error: ") << "divide by 0 error" << std::endl;
                 exit(-1);
             }
 
-            float output = _a->getIndex<float>(a_index) / _b->getIndex<float>(b_index);
-            _out->setIndex(out_index, (void*)(&output));
+            float output = _a->getIndex<float>(indices) / _b->getIndex<float>(indices);
+            _out->setIndex(indices, (void*)(&output));
         },
         a, b, out);
 }
@@ -127,10 +127,10 @@ void add(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<B
     _assert_equal_dtypes("add", a, b, out);
 
     kernel::_element_wise(
-        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _b, std::shared_ptr<Buffer> _out, size_t a_index,
-           size_t b_index, size_t out_index) {
-            float output = _a->getIndex<float>(a_index) + _b->getIndex<float>(b_index);
-            _out->setIndex(out_index, (void*)(&output));
+        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _b, std::shared_ptr<Buffer> _out,
+           const std::vector<int>& indices) {
+            float output = _a->getIndex<float>(indices) + _b->getIndex<float>(indices);
+            _out->setIndex(indices, (void*)(&output));
         },
         a, b, out);
 }
@@ -152,26 +152,27 @@ void subtract(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_
     _assert_equal_dtypes("subtract", a, b, out);
 
     kernel::_element_wise(
-        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _b, std::shared_ptr<Buffer> _out, size_t a_index,
-           size_t b_index, size_t out_index) {
-            float output = _a->getIndex<float>(a_index) - _b->getIndex<float>(b_index);
-            _out->setIndex(out_index, (void*)(&output));
+        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _b, std::shared_ptr<Buffer> _out,
+           const std::vector<int>& indices) {
+            float output = _a->getIndex<float>(indices) - _b->getIndex<float>(indices);
+            _out->setIndex(indices, (void*)(&output));
         },
         a, b, out);
 }
 
 void reciprocal(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out) {
+    _assert_equal_sizes("reciprocal", a, out);
     _assert_equal_dtypes("reciprocal", a, out);
 
     kernel::_element_wise(
-        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _out, size_t in_index, size_t out_index) {
-            if (_a->getIndex<float>(in_index) == 0.) {
+        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _out, size_t index) {
+            if (_a->getIndex<float>(index) < EPSILON) {
                 std::cerr << strings::error("buffer_ops::reciprocal error: ") << "divide by 0 error" << std::endl;
                 exit(-1);
             }
 
-            float output = 1 / _a->getIndex<float>(in_index);
-            _out->setIndex(out_index, (void*)(&output));
+            float output = 1. / _a->getIndex<float>(index);
+            _out->setIndex(index, (void*)(&output));
         },
         a, out);
 }
@@ -181,16 +182,16 @@ void ln(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out) {
     _assert_equal_dtypes("ln", a, out);
 
     kernel::_element_wise(
-        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _out, size_t in_index, size_t out_index) {
+        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _out, size_t index) {
             // TODO: option to ignore?
-            if (_a->getIndex<float>(in_index) <= EPSILON) {
+            if (_a->getIndex<float>(index) <= EPSILON) {
                 return;
                 std::cerr << strings::error("buffer_ops::ln error: ") << "cannot take natural log of 0" << std::endl;
                 // exit(-1);
             }
 
-            float output = std::log(_a->getIndex<float>(in_index));
-            _out->setIndex(out_index, (void*)(&output));
+            float output = std::log(_a->getIndex<float>(index));
+            _out->setIndex(index, (void*)(&output));
         },
         a, out);
 }
@@ -200,9 +201,9 @@ void sigmoid(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out) {
     _assert_equal_dtypes("sigmoid", a, out);
 
     kernel::_element_wise(
-        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t in_index, size_t out_index) {
-            float output = 1 / (1 + std::exp(-(a->getIndex<float>(in_index))));
-            out->setIndex(out_index, (void*)(&output));
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t index) {
+            float output = 1 / (1 + std::exp(-(a->getIndex<float>(index))));
+            out->setIndex(index, (void*)(&output));
         },
         a, out);
 }
@@ -212,10 +213,10 @@ void relu(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out) {
     _assert_equal_dtypes("relu", a, out);
 
     kernel::_element_wise(
-        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t in_index, size_t out_index) {
-            float output = a->getIndex<float>(in_index);
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t index) {
+            float output = a->getIndex<float>(index);
             output = output > EPSILON ? output : 0;
-            out->setIndex(out_index, (void*)(&output));
+            out->setIndex(index, (void*)(&output));
         },
         a, out);
 }
@@ -225,10 +226,10 @@ void pow(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<B
     _assert_equal_dtypes("pow", a, b, out);
 
     kernel::_element_wise(
-        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _b, std::shared_ptr<Buffer> _out, size_t a_index,
-           size_t b_index, size_t out_index) {
-            float output = std::pow(_a->getIndex<float>(a_index), _b->getIndex<float>(b_index));
-            _out->setIndex(out_index, (void*)(&output));
+        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _b, std::shared_ptr<Buffer> _out,
+           const std::vector<int>& indices) {
+            float output = std::pow(_a->getIndex<float>(indices), _b->getIndex<float>(indices));
+            _out->setIndex(indices, (void*)(&output));
         },
         a, b, out);
 }
@@ -335,14 +336,18 @@ void matmul(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_pt
         }
     }
 
-    iterators::BroadcastIterator it;
-
-    if (l_batch_shape.size() > 0 && r_batch_shape.size() > 0) {
-        it = l_is_lesser ? iterators::BroadcastIterator(l_batch_shape, r_batch_shape)
-                         : iterators::BroadcastIterator(r_batch_shape, l_batch_shape);
-    } else {
-        it = iterators::BroadcastIterator({1}, {1});
+    if (l_batch_shape.size() == 0) {
+        l_batch_shape = {1};
+        l_is_lesser = true;
     }
+
+    if (r_batch_shape.size() == 0) {
+        r_batch_shape = {1};
+        l_is_lesser = false;
+    }
+
+    iterators::BroadcastIterator it = l_is_lesser ? iterators::BroadcastIterator(l_batch_shape, r_batch_shape)
+                                                  : iterators::BroadcastIterator(r_batch_shape, l_batch_shape);
 
     while (!it.end()) {
         auto [lesser_index, greater_index] = it.getIndices();
@@ -436,6 +441,20 @@ void reduceSum(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, const std
 void set(std::shared_ptr<Buffer> a, float value) {
     for (size_t i = 0; i < a->size(); i++) {
         a->setIndex(i, (void*)(&value));
+    }
+}
+
+void copy(std::shared_ptr<Buffer> from, std::shared_ptr<Buffer> to) {
+    if (from->size() != to->size()) {
+        std::cout << strings::error("buffer_ops::copy error: ") << "mismatching sizes, got "
+                  << strings::info(std::to_string(from->size())) << " and " << strings::info(std::to_string(to->size()))
+                  << std::endl;
+        exit(-1);
+    }
+
+    for (size_t i = 0; i < from->size(); i++) {
+        float value = from->getIndex<float>(i);
+        to->setIndex(i, (void*)(&value));
     }
 }
 

@@ -22,13 +22,17 @@
 //       where f is the node `node` passed to the function as the argument
 //       a, b, ... etc. are the given inputs to `node` in their respective order
 
+// MAJOR TODO: gradients should NOT be initialized as 1 with their values mutliplied in!
+//             They should be set at their first calculation, then multiplied with the backpropagated gradient!
+//             If a function is not doing that, then it is incorrectly calculating the gradient!
+
 namespace gradient {
 
 void _propagate_current_grad(std::shared_ptr<Node> node, std::shared_ptr<Node> child) {
     if (child->operation_type_ != operations::constant) {
         // accumulation for broadcasted operations
-        std::shared_ptr<Buffer> lesser = child->gradient_;
-        std::shared_ptr<Buffer> greater = node->gradient_;
+        std::shared_ptr<GraphBuffer> lesser = child->gradient_;
+        std::shared_ptr<GraphBuffer> greater = node->gradient_;
 
         auto [node_shape, child_shape] = broadcasting::padVectors(node->gradient_->shape(), child->gradient_->shape());
 
@@ -54,7 +58,7 @@ void _propagate_current_grad(std::shared_ptr<Node> node, std::shared_ptr<Node> c
                 }
             }
 
-            std::shared_ptr<Buffer> reduced_grad(new Buffer(child_shape, DTYPE::float32));
+            std::shared_ptr<GraphBuffer> reduced_grad(new GraphBuffer(child_shape, DTYPE::float32));
 
             buffer_ops::reduceSum(node->gradient_, reduced_grad, reduction_indices);
             buffer_ops::multiply(reduced_grad, child->gradient_, child->gradient_);
@@ -178,25 +182,25 @@ void powGradient(std::shared_ptr<Node> node) {
     std::shared_ptr<Node> power = node->children_[node->arg_order_[1]];
 
     // df/da
-    std::shared_ptr<Buffer> minus_one(new Buffer(power->output_->shape(), power->output_->dtype()));
-    std::shared_ptr<Buffer> base_grad_staging(new Buffer(base->gradient_->shape(), DTYPE::float32));
+    std::shared_ptr<GraphBuffer> minus_one(new GraphBuffer(power->output_->shape(), power->output_->dtype()));
+    std::shared_ptr<GraphBuffer> base_grad_staging(new GraphBuffer(base->gradient_->shape(), DTYPE::float32));
 
     buffer_ops::add(power->output_, -1, minus_one);
     buffer_ops::pow(base->output_, minus_one, base_grad_staging);
-    buffer_ops::multiplyAndReduce(base_grad_staging, power->output_, base_grad_staging);
-    buffer_ops::multiplyAndReduce(base_grad_staging, base->gradient_, base->gradient_);
+    buffer_ops::multiply(base_grad_staging, power->output_, base_grad_staging);
+    buffer_ops::copy(base_grad_staging, base->gradient_);
 
     // df/db
-    std::shared_ptr<Buffer> power_grad_staging(new Buffer(power->gradient_->shape(), DTYPE::float32));
+    std::shared_ptr<GraphBuffer> power_grad_staging(new GraphBuffer(power->gradient_->shape(), DTYPE::float32));
     if (power->gradient_->size() == 1) {
-        std::shared_ptr<Buffer> temp(new Buffer(base->output_->shape(), base->output_->dtype()));
+        std::shared_ptr<GraphBuffer> temp(new GraphBuffer(base->output_->shape(), base->output_->dtype()));
         buffer_ops::ln(base->output_, temp);
         float grad_sum = buffer_ops::reduceSum(temp);
         power->gradient_->setIndex(0, (void*)(&grad_sum));
     } else {
         buffer_ops::ln(base->output_, power_grad_staging);
         buffer_ops::multiplyAndReduce(power_grad_staging, node->output_, power_grad_staging);
-        buffer_ops::multiplyAndReduce(power_grad_staging, power->gradient_, power_grad_staging);
+        buffer_ops::copy(power_grad_staging, power->gradient_);
     }
 
     _propagate_current_grad(node, base);
@@ -224,8 +228,8 @@ void matmulGradient(std::shared_ptr<Node> node) {
     std::swap(a_transpose_shape[a_transpose_shape.size() - 2], a_transpose_shape[a_transpose_shape.size() - 1]);
     std::swap(b_transpose_shape[b_transpose_shape.size() - 2], b_transpose_shape[b_transpose_shape.size() - 1]);
 
-    std::shared_ptr<Buffer> a_transpose(new Buffer(a_transpose_shape, a->output_->dtype()));
-    std::shared_ptr<Buffer> b_transpose(new Buffer(b_transpose_shape, b->output_->dtype()));
+    std::shared_ptr<GraphBuffer> a_transpose(new GraphBuffer(a_transpose_shape, a->output_->dtype()));
+    std::shared_ptr<GraphBuffer> b_transpose(new GraphBuffer(b_transpose_shape, b->output_->dtype()));
 
     std::vector<int> perm(a->gradient_->shape().size());
     for (int i = 0; i < a->gradient_->shape().size(); i++) {
@@ -234,8 +238,8 @@ void matmulGradient(std::shared_ptr<Node> node) {
 
     std::swap(perm[perm.size() - 2], perm[perm.size() - 1]);
 
-    std::shared_ptr<Buffer> a_staging_grad(new Buffer(a->gradient_->shape(), DTYPE::float32));
-    std::shared_ptr<Buffer> b_staging_grad(new Buffer(b->gradient_->shape(), DTYPE::float32));
+    std::shared_ptr<GraphBuffer> a_staging_grad(new GraphBuffer(a->gradient_->shape(), DTYPE::float32));
+    std::shared_ptr<GraphBuffer> b_staging_grad(new GraphBuffer(b->gradient_->shape(), DTYPE::float32));
 
     // df/dA
     buffer_ops::transpose(b->output_, b_transpose, perm);
@@ -267,7 +271,7 @@ void matmulGradient(std::shared_ptr<Node> node) {
             reduced.push_back(transpose_matmul_shape[i]);
         }
 
-        std::shared_ptr<Buffer> transpose_matmul(new Buffer(transpose_matmul_shape, DTYPE::float32));
+        std::shared_ptr<GraphBuffer> transpose_matmul(new GraphBuffer(transpose_matmul_shape, DTYPE::float32));
 
         buffer_ops::matmul(a_transpose, node->gradient_, transpose_matmul, a_transpose->shape_, node->shape_,
                            transpose_matmul_shape);
@@ -277,6 +281,7 @@ void matmulGradient(std::shared_ptr<Node> node) {
         std::vector<int> temp_shape = broadcasting::padVector(b_gradient_shape, transpose_matmul_shape.size());
         b_staging_grad->shape_ = temp_shape;
 
+        // why is the reduction index array just `{0}` ???
         buffer_ops::reduceSum(transpose_matmul, b_staging_grad, {0});
         buffer_ops::multiply(b_staging_grad, b->gradient_, b->gradient_);
     }
@@ -304,12 +309,11 @@ void sigmoidGradient(std::shared_ptr<Node> node) {
 void reluGradient(std::shared_ptr<Node> node) {
     std::shared_ptr<Node> a = node->children_[node->arg_order_[0]];
     kernel::_element_wise(
-        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _out, size_t in_index, size_t out_index) {
-            float value = _a->getIndex<float>(in_index);
-            float output = value * (value > EPSILON ? 1 : 0);
-            _out->setIndex(out_index, (void*)(&output));
+        [](std::shared_ptr<Buffer> _a, std::shared_ptr<Buffer> _out, size_t index) {
+            float output = _a->getIndex<float>(index) > EPSILON ? 1 : 0;
+            _out->setIndex(index, (void*)(&output));
         },
-        node->output_, a->gradient_);
+        a->output_, a->gradient_);
 
     _propagate_current_grad(node, a);
 }

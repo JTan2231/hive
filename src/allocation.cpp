@@ -48,10 +48,10 @@ void inputAllocate(std::shared_ptr<Node> node) {
         node->gradient_ = input_node->gradient_;
     } else {
         // otherwise this needs allocated space
-        node->output_ = std::shared_ptr<Buffer>(new Buffer(node->shape_, DTYPE::float32));
+        node->output_ = std::shared_ptr<GraphBuffer>(new GraphBuffer(node->shape_, DTYPE::float32));
 
         // what do we do with the gradient here
-        node->gradient_ = std::shared_ptr<Buffer>(new Buffer(node->shape_, DTYPE::float32));
+        node->gradient_ = std::shared_ptr<GraphBuffer>(new GraphBuffer(node->shape_, DTYPE::float32));
     }
 }
 
@@ -66,8 +66,8 @@ void tensorAllocate(std::shared_ptr<Node> node) {
         shape.push_back(dim);
     }
 
-    node->output_ = std::shared_ptr<Buffer>(new Buffer(node->shape_, DTYPE::float32));
-    node->gradient_ = std::shared_ptr<Buffer>(new Buffer(node->shape_, DTYPE::float32));
+    node->output_ = std::shared_ptr<GraphBuffer>(new GraphBuffer(node->shape_, DTYPE::float32));
+    node->gradient_ = std::shared_ptr<GraphBuffer>(new GraphBuffer(node->shape_, DTYPE::float32));
     const float one = 1;
     for (size_t i = 0; i < node->gradient_->size(); i++) {
         node->gradient_->setIndex(i, (void*)(&one));
@@ -108,8 +108,8 @@ void _element_wise_allocate(std::shared_ptr<Node> node) {
         }
     }
 
-    node->output_ = std::shared_ptr<Buffer>(new Buffer(output_shape, DTYPE::float32));
-    node->gradient_ = std::shared_ptr<Buffer>(new Buffer(gradient_shape, DTYPE::float32));
+    node->output_ = std::shared_ptr<GraphBuffer>(new GraphBuffer(output_shape, DTYPE::float32));
+    node->gradient_ = std::shared_ptr<GraphBuffer>(new GraphBuffer(gradient_shape, DTYPE::float32));
     const float one = 1;
     for (size_t i = 0; i < node->gradient_->size(); i++) {
         node->gradient_->setIndex(i, (void*)(&one));
@@ -222,8 +222,8 @@ void matmulAllocate(std::shared_ptr<Node> node) {
         exit(-1);
     }
 
-    node->output_ = std::shared_ptr<Buffer>(new Buffer(new_shape, DTYPE::float32));
-    node->gradient_ = std::shared_ptr<Buffer>(new Buffer(new_shape, DTYPE::float32));
+    node->output_ = std::shared_ptr<GraphBuffer>(new GraphBuffer(new_shape, DTYPE::float32));
+    node->gradient_ = std::shared_ptr<GraphBuffer>(new GraphBuffer(new_shape, DTYPE::float32));
     const float one = 1;
     for (size_t i = 0; i < node->gradient_->size(); i++) {
         node->gradient_->setIndex(i, (void*)(&one));
@@ -236,8 +236,8 @@ void matmulAllocate(std::shared_ptr<Node> node) {
 // does gradient_ need allocated here?
 // trivial memory usage either way
 void constantAllocate(std::shared_ptr<Node> node) {
-    node->output_ = std::shared_ptr<Buffer>(new Buffer({1}, DTYPE::float32));
-    node->gradient_ = std::shared_ptr<Buffer>(new Buffer({1}, DTYPE::float32));
+    node->output_ = std::shared_ptr<GraphBuffer>(new GraphBuffer({1}, DTYPE::float32));
+    node->gradient_ = std::shared_ptr<GraphBuffer>(new GraphBuffer({1}, DTYPE::float32));
 
     float value = std::stof(node->name_);
     float zero = 1;
@@ -248,7 +248,7 @@ void constantAllocate(std::shared_ptr<Node> node) {
 
 void normalAllocate(std::shared_ptr<Node> node) {
     tensorAllocate(node);
-    std::shared_ptr<Buffer> buf = node->output_;
+    std::shared_ptr<GraphBuffer> buf = node->output_;
 
     if (buf->dtype() != DTYPE::float32) {
         std::cerr << strings::error("allocation::allocateNormalNode error (TODO): ")
@@ -280,8 +280,8 @@ void reluAllocate(std::shared_ptr<Node> node) {
 void reduce_sumAllocate(std::shared_ptr<Node> node) {
     _input_validator(1, node->arg_order_.size(), "reduce_sum");
 
-    node->output_ = std::shared_ptr<Buffer>(new Buffer({1}, DTYPE::float32));
-    node->gradient_ = std::shared_ptr<Buffer>(new Buffer({1}, DTYPE::float32));
+    node->output_ = std::shared_ptr<GraphBuffer>(new GraphBuffer({1}, DTYPE::float32));
+    node->gradient_ = std::shared_ptr<GraphBuffer>(new GraphBuffer({1}, DTYPE::float32));
 
     float value = 0;
     float zero = 1;

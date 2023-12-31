@@ -19,29 +19,6 @@ namespace kernel {
 // TODO: gpu programming
 // TODO: is there anything we can do to manage precision? is that even an issue?
 
-bool broadcastable(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b) {
-    auto as = a->shape();
-    auto bs = b->shape();
-
-    if (as.size() > bs.size()) {
-        std::vector<int> ones(as.size() - bs.size(), 1);
-        bs.insert(bs.begin(), ones.begin(), ones.end());
-    } else if (bs.size() > as.size()) {
-        std::vector<int> ones(bs.size() - as.size(), 1);
-        as.insert(as.begin(), ones.begin(), ones.end());
-    }
-
-    for (int i = 0; i < as.size(); i++) {
-        if (as[i] != bs[i]) {
-            if (as[i] != 1 && bs[i] != 1) {
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
 void computeNode(std::shared_ptr<Node> node) {
     const auto& operationMap = OperationRegistry::GetOperationMap();
 
@@ -55,58 +32,45 @@ void computeNode(std::shared_ptr<Node> node) {
     }
 }
 
-void _element_wise(std::function<void(std::shared_ptr<Buffer>, std::shared_ptr<Buffer>, std::shared_ptr<Buffer>, size_t,
-                                      size_t, size_t)>
-                       element_function,
-                   std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out) {
-    int padding_size = std::max(a->shape().size(), b->shape().size());
-    std::vector<int> a_shape = broadcasting::padVector(a->shape(), padding_size);
-    std::vector<int> b_shape = broadcasting::padVector(b->shape(), padding_size);
+void _element_wise(binary_lambda element_function, std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b,
+                   std::shared_ptr<Buffer> out) {
+    auto [a_broadcasted, b_broadcasted] = broadcasting::makeBroadcastable(a, b);
+    std::vector<int> out_shape_broadcasted = broadcasting::broadcastedOutputShape(a_broadcasted, b_broadcasted);
+    std::shared_ptr<BroadcastedBuffer> out_broadcasted(new BroadcastedBuffer(out, out_shape_broadcasted));
+    iterators::IndexIterator it(out_shape_broadcasted);
 
-    bool ab_order = iterators::lesserGreater(a_shape, b_shape);
-    const std::vector<int>& lesser = ab_order ? a_shape : b_shape;
-    const std::vector<int>& greater = ab_order ? b_shape : a_shape;
-
-    iterators::BroadcastIterator it(lesser, greater);
     while (!it.end()) {
-        auto [lesser_index, greater_index] = it.getIndices();
-        if (ab_order) {
-            element_function(a, b, out, lesser_index, greater_index, greater_index);
-        } else {
-            element_function(a, b, out, greater_index, lesser_index, greater_index);
-        }
-
+        element_function(a_broadcasted, b_broadcasted, out_broadcasted, it.getIndices());
         it.increment();
     }
 }
 
-void _element_wise(
-    std::function<void(std::shared_ptr<Buffer>, std::shared_ptr<Buffer>, size_t, size_t)> element_function,
-    std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out) {
-    int padding_size = std::max(a->shape().size(), out->shape().size());
-    std::vector<int> a_shape = broadcasting::padVector(a->shape(), padding_size);
-    std::vector<int> b_shape = broadcasting::padVector(out->shape(), padding_size);
+void _element_wise(std::function<void(std::shared_ptr<Buffer>, std::shared_ptr<Buffer>, size_t)> element_function,
+                   std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out) {
+    if (a->size() != out->size()) {
+        std::cerr << strings::error("kernel::_element_wise error: ")
+                  << "unary operation mismatching sizes (can't be broadcasted), got "
+                  << strings::info(std::to_string(a->size())) << " and " << strings::info(std::to_string(out->size()))
+                  << std::endl;
+        exit(-1);
+    }
 
-    bool ab_order = iterators::lesserGreater(a_shape, b_shape);
-    const std::vector<int>& lesser = ab_order ? a_shape : b_shape;
-    const std::vector<int>& greater = ab_order ? b_shape : a_shape;
-
-    iterators::BroadcastIterator it(lesser, greater);
-    while (!it.end()) {
-        auto [lesser_index, greater_index] = it.getIndices();
-        if (ab_order) {
-            element_function(a, out, lesser_index, greater_index);
-        } else {
-            element_function(a, out, greater_index, lesser_index);
-        }
-
-        it.increment();
+    for (size_t i = 0; i < a->size(); i++) {
+        element_function(a, out, i);
     }
 }
 
 void _element_wise(
     std::function<void(std::shared_ptr<Buffer>, float, std::shared_ptr<Buffer>, size_t)> element_function,
     std::shared_ptr<Buffer> a, float b, std::shared_ptr<Buffer> out) {
+    if (a->size() != out->size()) {
+        std::cerr << strings::error("kernel::_element_wise error: ")
+                  << "unary operation mismatching sizes (can't be broadcasted), got "
+                  << strings::info(std::to_string(a->size())) << " and " << strings::info(std::to_string(out->size()))
+                  << std::endl;
+        exit(-1);
+    }
+
     for (size_t i = 0; i < out->size(); i++) {
         element_function(a, b, out, i);
     }
@@ -142,109 +106,109 @@ void ones(std::shared_ptr<Node> node) {
 
 void add(std::shared_ptr<Node> node) {
     _element_wise(
-        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out, size_t a_index,
-           size_t b_index, size_t out_index) {
-            float output = a->getIndex<float>(a_index) + b->getIndex<float>(b_index);
-            out->setIndex(out_index, (void*)(&output));
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out,
+           const std::vector<int>& indices) {
+            float output = a->getIndex<float>(indices) + b->getIndex<float>(indices);
+            out->setIndex(indices, (void*)(&output));
         },
         node->children_[node->arg_order_[0]]->output_, node->children_[node->arg_order_[1]]->output_, node->output_);
 }
 
 void subtract(std::shared_ptr<Node> node) {
     _element_wise(
-        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out, size_t a_index,
-           size_t b_index, size_t out_index) {
-            float output = a->getIndex<float>(a_index) - b->getIndex<float>(b_index);
-            out->setIndex(out_index, (void*)(&output));
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out,
+           const std::vector<int>& indices) {
+            float output = a->getIndex<float>(indices) - b->getIndex<float>(indices);
+            out->setIndex(indices, (void*)(&output));
         },
         node->children_[node->arg_order_[0]]->output_, node->children_[node->arg_order_[1]]->output_, node->output_);
 }
 
 void multiply(std::shared_ptr<Node> node) {
     _element_wise(
-        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out, size_t a_index,
-           size_t b_index, size_t out_index) {
-            float output = a->getIndex<float>(a_index) * b->getIndex<float>(b_index);
-            out->setIndex(out_index, (void*)(&output));
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out,
+           const std::vector<int>& indices) {
+            float output = a->getIndex<float>(indices) * b->getIndex<float>(indices);
+            out->setIndex(indices, (void*)(&output));
         },
         node->children_[node->arg_order_[0]]->output_, node->children_[node->arg_order_[1]]->output_, node->output_);
 }
 
 void divide(std::shared_ptr<Node> node) {
     _element_wise(
-        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out, size_t a_index,
-           size_t b_index, size_t out_index) {
-            if (std::fabs(b->getIndex<float>(b_index)) < EPSILON) {
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out,
+           const std::vector<int>& indices) {
+            if (std::fabs(b->getIndex<float>(indices)) < EPSILON) {
                 std::cerr << strings::error("kernel::divide error: ") << "divide by zero error." << std::endl;
                 exit(-1);
             }
 
-            float output = a->getIndex<float>(a_index) / b->getIndex<float>(b_index);
-            out->setIndex(out_index, (void*)(&output));
+            float output = a->getIndex<float>(indices) / b->getIndex<float>(indices);
+            out->setIndex(indices, (void*)(&output));
         },
         node->children_[node->arg_order_[0]]->output_, node->children_[node->arg_order_[1]]->output_, node->output_);
 }
 
 void sqrt(std::shared_ptr<Node> node) {
     _element_wise(
-        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t in_index, size_t out_index) {
-            if (a->getIndex<float>(in_index) < 0) {
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t index) {
+            if (a->getIndex<float>(index) < 0) {
                 std::cerr << strings::error("kernel::sqrt error: ")
                           << "argument is less than zero. We don't support complex numbers yet!" << std::endl;
                 exit(-1);
             }
 
-            float output = std::sqrt(a->getIndex<float>(in_index));
-            out->setIndex(out_index, (void*)(&output));
+            float output = std::sqrt(a->getIndex<float>(index));
+            out->setIndex(index, (void*)(&output));
         },
         node->children_[node->arg_order_[0]]->output_, node->output_);
 }
 
 void exp(std::shared_ptr<Node> node) {
     _element_wise(
-        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t in_index, size_t out_index) {
-            float output = std::exp(a->getIndex<float>(in_index));
-            out->setIndex(out_index, (void*)(&output));
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t index) {
+            float output = std::exp(a->getIndex<float>(index));
+            out->setIndex(index, (void*)(&output));
         },
         node->children_[node->arg_order_[0]]->output_, node->output_);
 }
 
 void pow(std::shared_ptr<Node> node) {
     _element_wise(
-        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out, size_t a_index,
-           size_t b_index, size_t out_index) {
-            float output = std::pow(a->getIndex<float>(a_index), b->getIndex<float>(b_index));
-            out->setIndex(out_index, (void*)(&output));
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out,
+           const std::vector<int>& indices) {
+            float output = std::pow(a->getIndex<float>(indices), b->getIndex<float>(indices));
+            out->setIndex(indices, (void*)(&output));
         },
         node->children_[node->arg_order_[0]]->output_, node->children_[node->arg_order_[1]]->output_, node->output_);
 }
 
 void sigmoid(std::shared_ptr<Node> node) {
     _element_wise(
-        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t in_index, size_t out_index) {
-            float output = 1 / (1 + std::exp(-(a->getIndex<float>(in_index))));
-            out->setIndex(out_index, (void*)(&output));
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t index) {
+            float output = 1 / (1 + std::exp(-(a->getIndex<float>(index))));
+            out->setIndex(index, (void*)(&output));
         },
         node->children_[node->arg_order_[0]]->output_, node->output_);
 }
 
 void relu(std::shared_ptr<Node> node) {
     _element_wise(
-        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t in_index, size_t out_index) {
-            float output = a->getIndex<float>(in_index);
+        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t index) {
+            float output = a->getIndex<float>(index);
             output = output > 0 ? output : 0;
-            out->setIndex(out_index, (void*)(&output));
+            out->setIndex(index, (void*)(&output));
         },
         node->children_[node->arg_order_[0]]->output_, node->output_);
 }
 
 void reduce_sum(std::shared_ptr<Node> node) {
-    _element_wise(
-        [](std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, size_t in_index, size_t out_index) {
-            float output = a->getIndex<float>(in_index) + out->getIndex<float>(0);
-            out->setIndex(0, (void*)(&output));
-        },
-        node->children_[node->arg_order_[0]]->output_, node->output_);
+    std::shared_ptr<GraphBuffer> a = node->children_[node->arg_order_[0]]->output_;
+    std::shared_ptr<GraphBuffer> out = node->output_;
+    for (size_t i = 0; i < a->size(); i++) {
+        float output = a->getIndex<float>(i) + out->getIndex<float>(0);
+        out->setIndex(0, (void*)(&output));
+    }
 }
 
 }  // namespace kernel

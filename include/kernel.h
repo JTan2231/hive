@@ -14,16 +14,15 @@ namespace kernel {
 // finds and applies the proper kernel to the given node
 void computeNode(std::shared_ptr<Node> node);
 
-bool broadcastable(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b);
+typedef std::function<void(std::shared_ptr<Buffer>, std::shared_ptr<Buffer>, std::shared_ptr<Buffer>,
+                           const std::vector<int>&)>
+    binary_lambda;
 
-void _element_wise(std::function<void(std::shared_ptr<Buffer>, std::shared_ptr<Buffer>, std::shared_ptr<Buffer>, size_t,
-                                      size_t, size_t)>
-                       element_function,
-                   std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b, std::shared_ptr<Buffer> out);
+void _element_wise(binary_lambda element_function, std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> b,
+                   std::shared_ptr<Buffer> out);
 
-void _element_wise(
-    std::function<void(std::shared_ptr<Buffer>, std::shared_ptr<Buffer>, size_t, size_t)> element_function,
-    std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out);
+void _element_wise(std::function<void(std::shared_ptr<Buffer>, std::shared_ptr<Buffer>, size_t)> element_function,
+                   std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out);
 
 void _element_wise(
     std::function<void(std::shared_ptr<Buffer>, float, std::shared_ptr<Buffer>, size_t)> element_function,

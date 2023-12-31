@@ -49,6 +49,8 @@ void reduceSum(std::shared_ptr<Buffer> a, std::shared_ptr<Buffer> out, const std
 
 void set(std::shared_ptr<Buffer> a, float value);
 
+void copy(std::shared_ptr<Buffer> from, std::shared_ptr<Buffer> to);
+
 }  // namespace buffer_ops
 
 #endif

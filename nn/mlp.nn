@@ -21,6 +21,4 @@ x = relu(x)
 let output = matmul(x, head)
 let final_output = add(output, headb)
 
-let e = subtract(label, final_output)
-let se = pow(e, 2)
-let mse = reduce_sum(se)
+let mse = pow(subtract(label, final_output), 2)

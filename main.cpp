@@ -63,6 +63,7 @@ void basicTrainingLoopTest() {
     nn_parser::NNParser parser(contents);
     std::shared_ptr<Graph> g = parser.parse(contents);
     g->allocate();
+    g->serialize("./hive_weights.json");
 
     const string dataset_path = "/home/joey/Downloads/sine_data.csv";
     vector<string> inputs = {"t"};
@@ -72,7 +73,6 @@ void basicTrainingLoopTest() {
     const int batch_size = 32;
     const float learning_rate = 0.01;
 
-    auto output = g->getNode("e");
     auto loss_node = g->getNode("mse");
 
     auto pred_node = g->getNode("final_output");
@@ -111,8 +111,8 @@ void basicTrainingLoopTest() {
             g->log(log_file);
         }
 
-        cout << strings::error("TRAINING STEP " + to_string(i + 1) + ", LOSS: ")
-             << strings::debug(to_string(mae.value())) << strings::error(", OUTPUT: ")
+        cout << strings::error("TRAINING STEP " + to_string(i + 1) + ", MAE: ")
+             << strings::debug(to_string(mae.value())) << strings::error(", LOSS: ")
              << strings::debug(to_string(loss.value())) << endl;
 
         if ((i + 1) % 32 == 0) {

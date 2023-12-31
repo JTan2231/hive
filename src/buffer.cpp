@@ -13,7 +13,13 @@
 
 // TODO: please god define an iterator for this
 
+Buffer::Buffer() {
+}
+
 Buffer::Buffer(std::vector<int> shape, DTYPE dtype) : shape_(shape), dtype_(dtype) {
+}
+
+GraphBuffer::GraphBuffer(std::vector<int> shape, DTYPE dtype) : Buffer(shape, dtype) {
     size_t size = 1;
     for (int dim : shape) {
         size *= dim;
@@ -23,9 +29,30 @@ Buffer::Buffer(std::vector<int> shape, DTYPE dtype) : shape_(shape), dtype_(dtyp
 
     data_ = _mm_malloc(size * dtypes::dtypeSize(dtype), 16);
     memset(data_, 0, size * dtypes::dtypeSize(dtype));
+
+    strides_ = std::vector<int>(shape.size(), 0);
+
+    size_t stride = 1;
+    for (int i = shape.size() - 1; i > -1; i--) {
+        if (shape[i] == 1) {
+            strides_[i] = 0;
+        } else {
+            strides_[i] = stride;
+        }
+
+        stride *= shape[i];
+    }
 }
 
-Buffer::~Buffer() {
+GraphBuffer::GraphBuffer(std::shared_ptr<GraphBuffer> buf) {
+    size_ = buf->size_;
+    data_ = buf->data_;
+    shape_ = buf->shape_;
+    dtype_ = buf->dtype_;
+    strides_ = buf->strides_;
+}
+
+GraphBuffer::~GraphBuffer() {
     _mm_free(data_);
 }
 
@@ -69,6 +96,39 @@ void Buffer::setIndex(size_t index, void* value) {
     if (dtype_ == DTYPE::float32) {
         *(dtypes::toFloat32(data_) + index) = *(dtypes::toFloat32(value));
     }
+}
+
+void Buffer::setIndex(const std::vector<int>& index, void* value) {
+    size_t flat_index = 0;
+    for (int i = 0; i < index.size(); i++) {
+        flat_index += index[i] * strides_[i];
+    }
+
+    setIndex(flat_index, value);
+}
+
+BroadcastedBuffer::BroadcastedBuffer(std::shared_ptr<Buffer> buffer, const std::vector<int>& broadcasted_shape)
+    : broadcasted_shape_(broadcasted_shape) {
+    // recalculate `strides_` with `broadcasted_shape`
+    size_ = buffer->size();
+    data_ = buffer->getData();
+    shape_ = buffer->shape_;
+    dtype_ = buffer->dtype();
+    strides_ = std::vector<int>(broadcasted_shape_.size(), 0);
+    size_t stride = 1;
+    for (int i = broadcasted_shape.size() - 1; i > -1; i--) {
+        if (broadcasted_shape[i] == 1) {
+            strides_[i] = 0;
+        } else {
+            strides_[i] = stride;
+        }
+
+        stride *= broadcasted_shape[i];
+    }
+}
+
+std::vector<int> BroadcastedBuffer::shape() {
+    return broadcasted_shape_;
 }
 
 size_t calculateIndex(const std::vector<int>& indices, const std::vector<int>& shape) {

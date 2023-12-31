@@ -49,8 +49,8 @@ class Node {
     // to figure out their shape during an allocation call
     std::shared_ptr<Node> input_mapping_;
 
-    std::shared_ptr<Buffer> output_;
-    std::shared_ptr<Buffer> gradient_;
+    std::shared_ptr<GraphBuffer> output_;
+    std::shared_ptr<GraphBuffer> gradient_;
 
     std::vector<int> shape_;
 
@@ -126,6 +126,8 @@ class Graph {
     void allocate();
 
     void print();
+
+    void serialize(const std::string& filepath);
 
     void calculateGradient();
 

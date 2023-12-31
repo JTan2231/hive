@@ -509,10 +509,8 @@ void Graph::log(std::ofstream& log_file) {
 
 void Graph::gradLog(std::ofstream& log_file) {
     for (auto& [id, node] : nodes_) {
-        if (node->trainable_) {
-            log_file << node->name_ << " " << strings::vecToString(node->shape_) << std::endl;
-            node->printGradient(log_file);
-        }
+        log_file << node->name_ << " " << strings::vecToString(node->shape_) << std::endl;
+        node->printGradient(log_file);
     }
 }
 
@@ -555,6 +553,33 @@ void _print_node(std::shared_ptr<Node> node) {
 
 void Graph::print() {
     topologicalSort(_print_node);
+}
+
+void Graph::serialize(const std::string& filepath) {
+    std::ofstream file;
+    file.open(filepath, std::ios::out | std::ios::app);
+
+    file << "{";
+
+    int variables = 0;
+    for (auto [id, node] : nodes_) {
+        variables += node->trainable_;
+    }
+
+    for (auto [id, node] : nodes_) {
+        if (node->trainable_) {
+            file << "\"" << node->name_ << "\": [";
+            for (size_t i = 0; i < node->output_->size() - 1; i++) {
+                file << node->output_->getIndex<float>(i) << ", ";
+            }
+
+            file << node->output_->getIndex<float>(node->output_->size() - 1) << "]" << (variables > 1 ? "," : "");
+            variables--;
+        }
+    }
+
+    file << "}";
+    file.close();
 }
 
 // bfs to propagate the gradient calculation down from the head

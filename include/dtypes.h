@@ -13,7 +13,7 @@ static size_t dtypeSize(DTYPE dtype) {
     }
 
     if (dtype == DTYPE::float64) {
-        return sizeof(double);
+        return sizeof(float);
     }
 
     return 0;
