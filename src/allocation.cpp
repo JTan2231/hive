@@ -1,5 +1,6 @@
 #include "allocation.h"
 
+#include <cmath>
 #include <memory>
 #include <vector>
 
@@ -191,14 +192,6 @@ void matmulAllocate(std::shared_ptr<Node> node) {
     }
 
     if (shape_a.size() < 2 || shape_b.size() < 2) {
-        node->printNode();
-
-        std::cout << strings::error("INPUT NAMES: ") << strings::info(node->children_[node->arg_order_[0]]->name_)
-                  << " and " << strings::info(node->children_[node->arg_order_[1]]->name_) << std::endl;
-
-        node->children_[node->arg_order_[0]]->printNode();
-        node->children_[node->arg_order_[1]]->printNode();
-
         std::cerr << strings::error("allocation::matmulAllocateError: ")
                   << "matmul shapes must be at least 2 dimensions in shape, got "
                   << strings::info(strings::vecToString(shape_a)) << " and "
@@ -290,6 +283,43 @@ void reduce_sumAllocate(std::shared_ptr<Node> node) {
     node->gradient_->setIndex(0, (void*)(&zero));
 
     node->shape_ = {1};
+}
+
+void conv2dAllocate(std::shared_ptr<Node> node) {
+    _input_validator(2, node->arg_order_.size(), "conv2d");
+
+    std::shared_ptr<Node> input_image = node->children_[node->arg_order_[0]];
+    std::shared_ptr<Node> kernel = node->children_[node->arg_order_[1]];
+
+    // check shapes
+    if (input_image->shape_.size() < 3) {
+        std::cerr << strings::error("allocation::conv2dAllocate error: ")
+                  << "input image shape must have at least 3 dimensions, got "
+                  << strings::info(strings::vecToString(input_image->shape_)) << std::endl;
+        exit(-1);
+    }
+
+    if (kernel->shape_.size() != 3) {
+        std::cerr << strings::error("allocation::conv2dAllocate error: ")
+                  << "kernel must have 3 dimensions (output_filters, kernel_width, kernel_height), got "
+                  << strings::info(strings::vecToString(kernel->shape_)) << std::endl;
+        exit(-1);
+    }
+
+    for (int i = 0; i < input_image->shape_.size() - 3; i++) {
+        node->shape_.push_back(input_image->shape_[i]);
+    }
+
+    int n = input_image->shape_.size();
+
+    // output_width and height (in that order)
+    node->shape_.push_back(input_image->shape_[n - 3] - std::ceil(kernel->shape_[0] / 2));
+    node->shape_.push_back(input_image->shape_[n - 2] - std::ceil(kernel->shape_[1] / 2));
+
+    node->shape_.push_back(kernel->shape_[2]);
+
+    node->output_ = std::shared_ptr<GraphBuffer>(new GraphBuffer(node->shape_, DTYPE::float32));
+    node->gradient_ = std::shared_ptr<GraphBuffer>(new GraphBuffer(node->shape_, DTYPE::float32));
 }
 
 }  // namespace allocation

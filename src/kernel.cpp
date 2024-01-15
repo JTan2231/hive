@@ -13,11 +13,13 @@
 
 namespace kernel {
 
-// TODO: how will broadcasting be handled?
 // TODO: figure something out with the float templates
 // TODO: parallelization
 // TODO: gpu programming
 // TODO: is there anything we can do to manage precision? is that even an issue?
+//
+// NOTE: shape validation and creation is largely handled in `allocation.cpp`
+//       we _shouldn't_ need to worry about that here
 
 void computeNode(std::shared_ptr<Node> node) {
     const auto& operationMap = OperationRegistry::GetOperationMap();
@@ -209,6 +211,24 @@ void reduce_sum(std::shared_ptr<Node> node) {
         float output = a->getIndex<float>(i) + out->getIndex<float>(0);
         out->setIndex(0, (void*)(&output));
     }
+}
+
+// `input_image` has shape [batch_dims, hi, wi, c] where c is the number of channels
+// `kernel` has shape [o, hk, wk] where o is the number of output filters
+void conv2d(std::shared_ptr<Node> node) {
+    std::shared_ptr<GraphBuffer> input_image = node->children_[node->arg_order[0]];
+    std::shared_ptr<GraphBuffer> kernel = node->children_[node->arg_order[1]];
+
+    int in = input_image->shape_.size();
+    int kn = kernel->shape_.size();
+
+    int ix = input_image->shape_[in - 2];
+    int iy = input_image->shape_[in - 3];
+
+    int kx = kernel->shape_[]
+
+             // kernel offsets
+             int dk_x = std::floor()
 }
 
 }  // namespace kernel

@@ -85,6 +85,7 @@ REGISTER_OPERATION(exp);
 REGISTER_OPERATION(pow);
 
 REGISTER_OPERATION(matmul);
+REGISTER_OPERATION(conv2d);  // conv2d(input_channels, output_channels, kernel_width, kernel_height)
 
 REGISTER_OPERATION(sigmoid);
 REGISTER_OPERATION(relu);
