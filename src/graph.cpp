@@ -55,6 +55,7 @@ std::string _node_format(float x) {
 
 // these two print functions can probably be abstracted
 
+// TODO: take another look at this please
 void Node::printOutput(std::ostream& stream) {
     if (shape_.size() < 2) {
         for (size_t i = 0; i < output_->size(); i++) {
@@ -76,28 +77,32 @@ void Node::printOutput(std::ostream& stream) {
         batch_shape = shape_;
     }
 
-    iterators::IndexIterator it(batch_shape);
+    iterators::IndexIterator it(shape_);
 
     int m = shape_[shape_.size() - 2];
     int n = shape_[shape_.size() - 1];
 
-    stream << "    ";
     if (shape_.size() > 2) {
         while (!it.end()) {
-            size_t index = it.getIndex();
+            stream << "    ";
 
-            for (int r = 0; r < m; r++) {
-                for (int c = 0; c < n; c++) {
-                    std::string output = std::to_string(output_->getIndex<float>(index + (r * n) + c));
+            for (int r = 0; r < m && !it.end(); r++) {
+                for (int c = 0; c < n && !it.end(); c++) {
+                    size_t index = it.getIndex();
+                    std::string output = std::to_string(output_->getIndex<float>(index));
                     stream << output << ", ";
+
+                    it.increment();
                 }
             }
 
-            it.increment();
+            stream << std::endl;
         }
 
         stream << std::endl;
     } else if (shape_.size() == 2) {
+        stream << "    ";
+
         for (int r = 0; r < m; r++) {
             for (int c = 0; c < n; c++) {
                 stream << output_->getIndex<float>(r * n + c) << ", ";

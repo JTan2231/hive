@@ -213,22 +213,94 @@ void reduce_sum(std::shared_ptr<Node> node) {
     }
 }
 
-// `input_image` has shape [batch_dims, hi, wi, c] where c is the number of channels
-// `kernel` has shape [o, hk, wk] where o is the number of output filters
+// `input_image` has shape [batch_dims..., hi, wi, c] where c is the number of channels
+// `kernel` has shape [hk, wk, o] where o is the number of output filters
+//
+// NOTE: this DOES NOT support batched kernels
 void conv2d(std::shared_ptr<Node> node) {
-    std::shared_ptr<GraphBuffer> input_image = node->children_[node->arg_order[0]];
-    std::shared_ptr<GraphBuffer> kernel = node->children_[node->arg_order[1]];
+    std::shared_ptr<GraphBuffer> input_image = node->children_[node->arg_order_[0]]->output_;
+    std::shared_ptr<GraphBuffer> output_image = node->output_;
+    std::shared_ptr<GraphBuffer> kernel = node->children_[node->arg_order_[1]]->output_;
 
     int in = input_image->shape_.size();
+    int on = output_image->shape_.size();
     int kn = kernel->shape_.size();
 
     int ix = input_image->shape_[in - 2];
     int iy = input_image->shape_[in - 3];
+    int input_channels = input_image->shape_[in - 1];
 
-    int kx = kernel->shape_[]
+    int ox = output_image->shape_[on - 2];
+    int oy = output_image->shape_[on - 3];
 
-             // kernel offsets
-             int dk_x = std::floor()
+    int kx = kernel->shape_[kn - 2];
+    int ky = kernel->shape_[kn - 3];
+    int kernel_channels = kernel->shape_[kn - 1];
+
+    // kernel offsets
+    int dk_x = std::floor(kx / 2.);
+    int dk_y = std::floor(ky / 2.);
+
+    int batches = 1;
+    for (int i = 0; i < in - 3; i++) {
+        batches *= input_image->shape_[i];
+    }
+
+    int input_image_size = 1;
+    for (int i = in - 3; i < in; i++) {
+        input_image_size *= input_image->shape_[i];
+    }
+
+    int output_image_size = 1;
+    for (int i = on - 3; i < on; i++) {
+        output_image_size *= output_image->shape_[i];
+    }
+
+    // 7 for loops lol
+    for (int batch = 0; batch < batches; batch++) {
+        // iterate over pixels in the output image
+        for (int y = 0; y < oy; y++) {
+            for (int x = 0; x < ox; x++) {
+                float output_value = 0;
+
+                // mapping from output coordinates to input coordinates
+                int input_x = x + dk_x;
+                int input_y = y + dk_y;
+
+                // iterating over the kernel
+                for (int kc = 0; kc < kernel_channels; kc++) {
+                    for (int i = -std::ceil(ky / 2.) + 1; i < std::ceil(ky / 2.); i++) {
+                        for (int j = -std::ceil(kx / 2.) + 1; j < std::ceil(kx / 2.); j++) {
+                            int kernel_x = dk_x - j;
+                            int kernel_y = dk_y - i;
+
+                            // iterating over each channel
+                            for (int ic = 0; ic < input_channels; ic++) {
+                                float input_value =
+                                    input_image->getIndex<float>(batch * input_image_size +             // batch index
+                                                                 (input_y + i) * ix * input_channels +  // y index
+                                                                 (input_x + j) * input_channels + ic);  // x index
+
+                                float kernel_value = kernel->getIndex<float>(kernel_y * kx * kernel_channels +
+                                                                             kernel_x * kernel_channels + kc);
+
+                                output_value += input_value * kernel_value;
+                            }
+
+                            // output will be the average of each input channel
+                            output_value /= input_channels;
+
+                            output_image->setIndex(batch * output_image_size +     // batch index
+                                                       y * ox * kernel_channels +  // y index
+                                                       x * kernel_channels +       // x index
+                                                       kc,                         // channel index
+                                                   (void*)(&output_value));
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 }  // namespace kernel

@@ -299,6 +299,7 @@ void conv2dAllocate(std::shared_ptr<Node> node) {
         exit(-1);
     }
 
+    // kernel can't be batched
     if (kernel->shape_.size() != 3) {
         std::cerr << strings::error("allocation::conv2dAllocate error: ")
                   << "kernel must have 3 dimensions (output_filters, kernel_width, kernel_height), got "
@@ -313,8 +314,8 @@ void conv2dAllocate(std::shared_ptr<Node> node) {
     int n = input_image->shape_.size();
 
     // output_width and height (in that order)
-    node->shape_.push_back(input_image->shape_[n - 3] - std::ceil(kernel->shape_[0] / 2));
-    node->shape_.push_back(input_image->shape_[n - 2] - std::ceil(kernel->shape_[1] / 2));
+    node->shape_.push_back(input_image->shape_[n - 3] - kernel->shape_[0] + 1);
+    node->shape_.push_back(input_image->shape_[n - 2] - kernel->shape_[1] + 1);
 
     node->shape_.push_back(kernel->shape_[2]);
 

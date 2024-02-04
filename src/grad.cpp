@@ -322,4 +322,7 @@ void reduce_sumGradient(std::shared_ptr<Node> node) {
     _propagate_current_grad(node, node->children_[node->arg_order_[0]]);
 }
 
+void conv2dGradient(std::shared_ptr<Node> node) {
+}
+
 }  // namespace gradient

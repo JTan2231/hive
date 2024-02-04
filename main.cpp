@@ -199,6 +199,19 @@ void reduceSumTest() {
     cout << endl;
 }
 
+void basicBinaryOpEvalTest(const string& op_name) {
+    const string filepath = "./nn/tests/" + op_name + ".nn";
+    const string contents = nn_parser::readFile(filepath);
+
+    nn_parser::NNParser parser(contents);
+    std::shared_ptr<Graph> g = parser.parse(contents);
+    g->allocate();
+
+    g->evaluate();
+    g->printNodeValues();
+    g->print();
+}
+
 void basicBinaryOpGradientTest(const string& op_name) {
     const string filepath = "./nn/tests/" + op_name + ".nn";
     const string contents = nn_parser::readFile(filepath);
@@ -270,5 +283,5 @@ void denseLayerTest() {
 }
 
 int main() {
-    basicTrainingLoopTest();
+    basicBinaryOpEvalTest("conv2d");
 }
