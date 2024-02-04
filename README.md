@@ -1,11 +1,8 @@
 # Hive
 
-My playground for tensor processing and low-level deep learning algorithms. This is a machine learning framework designed to help me understand
-what makes these sorts of frameworks productive, efficient, and easy to use. It also serves as a basic inquiry into language writing and the 
-possibility of a tensor programming language
+My playground for understanding the technical difficulties in implementing a performant tensor processing and automatic differentation framework
 
-This project is still heavy in development and not at all suitable for use in others. Abstractions are limited with next to no optimization.
+This project is still heavy in development--I wouldn't recommend using this as a dependency.
 
 # Examples
-Hive models are defined in `.nn` files which have a very basic syntax (see the `nn/` folder for examples). For an example of training, change the `dataset_path` in `main.cpp`
-and compile with `g++ ./src/*.cpp ./src/data/*.cpp main.cpp -o test -I./include -I./include/data -std=c++2a`.
+Hive models are defined in `.nn` files which have a very basic syntax (see the `nn/` folder for examples). Change `main.cpp` to use whichever of the example tests you want and compile with `g++ ./src/*.cpp ./src/data/*.cpp main.cpp -o test -I./include -I./include/data -std=c++2a`.
